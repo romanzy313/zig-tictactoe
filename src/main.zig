@@ -19,8 +19,20 @@ pub fn main() !void {
 
     try input.clearScreen(stdout);
 
-    // try board.print(stdout);
-    // try stdout.print("Game state: {s}\n", .{@tagName(board.state())});
+    // two ways to parse args
+    // source https://ziggit.dev/t/read-command-line-arguments/220/7
+    var args = std.process.args();
+    _ = args.skip(); //to skip the zig call
+
+    while (args.next()) |arg| {
+        try stdout.print("{s}, ", .{arg});
+    }
+    try stdout.print("\n\n", .{});
+
+    for (std.os.argv[1..]) |arg| {
+        std.debug.print("  {s}\n", .{arg});
+    }
+    try stdout.print("\n\n", .{});
 
     // TODO: depend on who goes first
     var playerPos = Board.CellPosition{ .x = 1, .y = 1 };
@@ -59,6 +71,7 @@ pub fn main() !void {
 
                 const cond = board.state();
 
+                // woops, this gets cleared...
                 switch (cond) {
                     .Stalemate => try stdout.print("outcome: stalemate\n", .{}),
                     .WinX => try stdout.print("outcome: x won (you)\n", .{}),
