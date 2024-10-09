@@ -1,10 +1,8 @@
 const std = @import("std");
 const testing = std.testing;
 
-export fn add(a: i32, b: i32) i32 {
-    return a + b;
-}
-
-test "basic add functionality" {
-    try testing.expect(add(3, 7) == 10);
+// add files to be tested here...
+// https://stackoverflow.com/questions/75762207/how-to-test-multiple-files-in-zig
+comptime {
+    _ = @import("board.zig");
 }
