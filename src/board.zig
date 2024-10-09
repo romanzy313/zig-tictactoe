@@ -197,14 +197,14 @@ pub const Board = struct {
         }
     }
 
-    pub fn printWithSelection(self: *Board, writer: anytype, pos: CellPosition) !void {
+    pub fn printWithSelection(self: Board, writer: anytype, pos: CellPosition) !void {
 
         // https://stackoverflow.com/questions/4842424/list-of-ansi-color-escape-sequences
         const ansiNormal: []const u8 = "\u{001b}[0m";
         const ansiSelected: []const u8 = "\u{001b}[7m";
 
         // index capture syntax :(
-        for (&self.grid, 0..) |*row, i| {
+        for (self.grid, 0..) |row, i| {
             for (row, 0..) |cell, j| {
                 const ansiPrefix: []const u8 = if (pos.x == i and pos.y == j) ansiSelected else ansiNormal;
                 switch (cell) {

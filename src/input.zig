@@ -87,4 +87,10 @@ pub const CliInput = struct {
 
         return Command.None;
     }
+
+    pub fn clearScreen(self: CliInput, writer: std.io.AnyWriter) !void {
+        _ = self;
+
+        try writer.writeAll("\x1b[2J");
+    }
 };
