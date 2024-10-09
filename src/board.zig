@@ -299,7 +299,7 @@ test "WinCondition - vertical" {
     var board = try Board.init(test_allocator, 3);
     defer board.deinit();
 
-    try std.testing.expectEqual(Board.State.None, board.state());
+    try std.testing.expectEqual(Board.State.Playing, board.state());
 
     // add a winning condition manually
     try board.makeMove(Board.Player.X, Board.CellPosition{ .x = 1, .y = 0 });
