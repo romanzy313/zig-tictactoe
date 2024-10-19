@@ -18,9 +18,9 @@ pub fn main() !void {
     defer state.deinit(allocator);
 
     // const ai = Ai.init(.Easy);
+    const ai = null;
 
-    // const serv = server.LocalWithAi.init(&state, ai, true);
-    const serv = server.LocalMultiplayer.init(&state, .X);
+    const serv = server.UniversalServer.init(&state, ai, true);
 
     try cli.mainLoop(serv);
 }

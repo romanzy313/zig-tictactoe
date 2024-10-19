@@ -29,8 +29,10 @@ pub const CellPosition = struct { x: usize, y: usize };
 
 pub const CellValue = enum { Empty, X, O };
 
+pub const Grid = [][]CellValue;
+
 pub const State = struct {
-    grid: [][]CellValue,
+    grid: Grid,
     size: usize,
     status: Status,
 

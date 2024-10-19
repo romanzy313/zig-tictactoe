@@ -12,6 +12,7 @@ pub fn ComptimeAi(comptime diff: Difficulty) type {
                 return easyMove(state);
             }
         },
+        else => @compileError("difficulty not implemented yet"),
     };
 }
 

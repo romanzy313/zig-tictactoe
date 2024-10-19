@@ -68,3 +68,61 @@ pub const Remote = struct {
         };
     }
 };
+
+pub const Request = union(enum) {
+    makeMove: game.CellPosition,
+};
+
+pub const Response = union(enum) {
+    stateUpdate: game.State,
+    // err: []const u8, // TODO: typed errors as string
+};
+
+pub const UniversalServer = struct {
+    state: *game.State,
+    ai: ?Ai,
+
+    pub fn init(state: *game.State, ai: ?Ai, playerStarts: bool) UniversalServer {
+        // const state = game.State.init(allocator, 3); // where does this 3 parameter go?
+        if (ai != null and !playerStarts) {
+            const move = ai.?.getMove(state);
+            _ = state.makeMove(move) catch @panic("will never happen: always moves available");
+        }
+
+        return .{
+            .state = state,
+            .ai = ai,
+        };
+    }
+
+    // hmm?
+    pub fn stateCopy(self: UniversalServer) game.State {
+        return self.state.*;
+    }
+
+    pub fn handleRequest(self: UniversalServer, req: Request) !Response {
+        // if AI is enabled, the move must be delegated to the AI...
+        // that must be done via networking though by the server!
+
+        return switch (req) {
+            .makeMove => |pos| {
+                const status = try self.state.makeMove(pos);
+                if (!status.isPlaying()) {
+                    return .{
+                        .stateUpdate = self.state.*,
+                    };
+                }
+                if (self.ai != null) {
+                    const aiMove = self.ai.?.getMove(self.state);
+
+                    _ = try self.state.makeMove(aiMove);
+                }
+
+                return .{
+                    .stateUpdate = self.state.*,
+                };
+            },
+            // else => return error.NotImplemented,
+        };
+    }
+};

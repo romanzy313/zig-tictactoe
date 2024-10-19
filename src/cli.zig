@@ -25,16 +25,20 @@ const ANSI_NORMAL: []const u8 = "\u{001b}[0m";
 const ANSI_SELECTED: []const u8 = "\u{001b}[7m";
 const CLEAR_TERM: []const u8 = "\x1b[2J\x1b[H";
 
-pub fn mainLoop(serv: server.LocalMultiplayer) !void {
+pub fn mainLoop(serv: server.UniversalServer) !void {
     const raw = try RawMode.init();
     defer raw.deinit();
     const stdin = std.io.getStdIn().reader().any();
     const stdout = std.io.getStdOut().writer().any();
 
-    const state = serv.state;
+    // get own copy of the state from the iniversal server?
+
+    var localState = serv.stateCopy();
 
     var nav = Navigation.init(game.GAME_SIZE, game.STARTING_POSITION);
-    try render(stdout, state, nav.pos, null);
+
+    // render the copy...
+    try render(stdout, &localState, nav.pos, null);
 
     while (true) {
         const cmd = try readCommand(stdin);
@@ -45,11 +49,16 @@ pub fn mainLoop(serv: server.LocalMultiplayer) !void {
                 return;
             },
             .Select => {
-                const isPlaying = serv.submitMove(nav.pos) catch |e| {
-                    try render(stdout, state, nav.pos, e);
-                    continue;
-                };
+                // errors are not handled, application will crash
+                const res = try serv.handleRequest(.{
+                    .makeMove = nav.pos,
+                });
 
+                localState = res.stateUpdate;
+
+                try render(stdout, &localState, nav.pos, null);
+
+                const isPlaying = localState.status.isPlaying();
                 if (!isPlaying) {
                     break;
                 }
@@ -59,14 +68,14 @@ pub fn mainLoop(serv: server.LocalMultiplayer) !void {
             .Up => nav.onDir(.Up),
             .Down => nav.onDir(.Down),
         }
-        try render(stdout, state, nav.pos, null);
+        try render(stdout, &localState, nav.pos, null);
     }
 
-    try render(stdout, state, nav.pos, null);
-    try stdout.print("Game over. Status: {any}\n", .{state.status});
+    try render(stdout, &localState, nav.pos, null);
+    try stdout.print("Game over. Status: {any}\n", .{localState.status});
 }
 
-pub fn render(writer: std.io.AnyWriter, state: *const game.State, selection: game.CellPosition, err: ?anyerror) !void {
+pub fn render(writer: std.io.AnyWriter, state: *game.State, selection: game.CellPosition, err: ?anyerror) !void {
     try writer.writeAll(CLEAR_TERM);
 
     for (state.grid, 0..) |row, i| {
