@@ -3,7 +3,7 @@ const debug = std.debug;
 
 const game = @import("game.zig");
 const config = @import("config.zig");
-const server = @import("server.zig");
+const game_server = @import("game_server.zig");
 const cli = @import("cli.zig");
 const input = @import("input.zig");
 const Ai = @import("ai.zig").Ai;
@@ -25,7 +25,7 @@ pub fn main() !void {
 
     const ai = if (cfg.aiDifficulty != null) Ai.init(cfg.aiDifficulty.?) else null;
 
-    const serv = server.UniversalServer.init(&state, ai, true);
+    const serv = game_server.UniversalServer.init(&state, ai, true);
 
     try cli.mainLoop(serv);
 }
