@@ -1,7 +1,7 @@
 const std = @import("std");
 
 // why are these not in std?
-// something like std.math.min(0, std.math.max(2, x + 1)); would be ncie
+// something like std.math.min(0, std.math.max(2, x + 1)); would be nice
 
 pub fn max(comptime T: type, a: T, b: T) T {
     if (a > b) {

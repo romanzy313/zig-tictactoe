@@ -1,97 +1,62 @@
 const std = @import("std");
-const Board = @import("board.zig").Board;
-const Input = @import("input.zig");
-const math = @import("math.zig");
 
+const game = @import("game.zig");
+const server = @import("server.zig");
+const cli = @import("cli.zig");
+const input = @import("input.zig");
+const Ai = @import("ai.zig").Ai;
+const Navigation = @import("input.zig").Navigation;
+
+pub const GAME_SIZE = 3;
+pub const STARTING_POSITION: game.CellPosition = .{ .x = 1, .y = 1 };
+
+// this is main for cli only!
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const stdout = std.io.getStdOut().writer().any();
+    var state = try game.State.init(allocator, GAME_SIZE);
+    defer state.deinit(allocator);
+
+    const raw = try cli.RawMode.init();
+    defer raw.deinit();
     const stdin = std.io.getStdIn().reader().any();
+    const stdout = std.io.getStdOut().writer().any();
 
-    var board = try Board.init(allocator, 3);
-    defer board.deinit();
+    const ai = Ai.init(.Easy);
 
-    const input = try Input.CliInput.init();
-    defer input.deinit();
+    const serv = server.LocalWithAi.init(&state, ai, true);
 
-    try input.clearScreen(stdout);
-
-    // two ways to parse args
-    // source https://ziggit.dev/t/read-command-line-arguments/220/7
-    var args = std.process.args();
-    _ = args.skip(); //to skip the zig call
-
-    while (args.next()) |arg| {
-        try stdout.print("{s}, ", .{arg});
-    }
-    try stdout.print("\n\n", .{});
-
-    for (std.os.argv[1..]) |arg| {
-        std.debug.print("  {s}\n", .{arg});
-    }
-    try stdout.print("\n\n", .{});
-
-    // TODO: depend on who goes first
-    var playerPos = Board.CellPosition{ .x = 1, .y = 1 };
-    var currentPlayer = Board.Player.X;
-
-    try board.printWithSelection(stdout, playerPos);
+    var nav = Navigation.init(GAME_SIZE, STARTING_POSITION);
+    try cli.render(stdout, &state, nav.pos, null);
 
     while (true) {
-        const cmd = try input.getCommand(stdin);
+        const cmd = try cli.readCommand(stdin);
 
         switch (cmd) {
-            Input.Command.Quit => {
+            .Quit => {
                 try stdout.print("Quitting...\n", .{});
                 return;
             },
-
-            Input.Command.Left => {
-                // if (playerPos.x > 0) playerPos.x -= 1;
-                if (playerPos.y > 0) playerPos.y -= 1;
-            },
-            Input.Command.Right => {
-                if (playerPos.y < 2) playerPos.y += 1;
-            },
-            Input.Command.Down => {
-                if (playerPos.x < 2) playerPos.x += 1;
-            },
-            Input.Command.Up => {
-                if (playerPos.x > 0) playerPos.x -= 1;
-            },
-            // TODO handle the rest
-            Input.Command.Select => {
-                board.makeMove(currentPlayer, playerPos) catch |e| {
-                    try stdout.print("error: {any}\n", .{e});
+            .Select => {
+                const isPlaying = serv.submitMove(nav.pos) catch |e| {
+                    try cli.render(stdout, &state, nav.pos, e);
                     continue;
                 };
 
-                const cond = board.state();
-
-                // woops, this gets cleared...
-                switch (cond) {
-                    .Stalemate => try stdout.print("outcome: stalemate\n", .{}),
-                    .WinX => try stdout.print("outcome: x won (you)\n", .{}),
-                    .WinO => try stdout.print("outcome: o won (ai)\n", .{}),
-                    else => {},
+                if (!isPlaying) {
+                    break;
                 }
-
-                if (currentPlayer == .X) currentPlayer = .O else currentPlayer = .X;
             },
-            else => {
-                // std.debug.print("doint nothing", args: anytype)
-
-                std.debug.print("Got command {}\n", .{cmd});
-                continue;
-            },
+            .Left => nav.onDir(.Left),
+            .Right => nav.onDir(.Right),
+            .Up => nav.onDir(.Up),
+            .Down => nav.onDir(.Down),
         }
-
-        // simply redraw on every frame
-        try input.clearScreen(stdout);
-        try board.printWithSelection(stdout, playerPos);
-        try stdout.print("game state {any}\n", .{board.state()});
+        try cli.render(stdout, &state, nav.pos, null);
     }
+
+    try cli.render(stdout, &state, nav.pos, null);
+    try stdout.print("Game over. Status: {any}\n", .{state.status});
 }
