@@ -17,7 +17,7 @@ pub fn main() !void {
 
     const cfg = try config.parseConfigFromArgs(allocator);
 
-    cfg.debugPrint();
+    cfg.debugPrint(); // will be cleared when game is ran!
 
     // this main loop needs to create an appropriate server for the game
     var state = try game.State.init(allocator, game.GAME_SIZE);

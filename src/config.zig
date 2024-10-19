@@ -31,7 +31,6 @@ pub fn parseConfigFromArgs(allocator: Allocator) !Config {
     }
 
     outer: for (args, 0..) |arg, i| {
-
         // debug.print("parsing {s}\n", .{arg});
         if (std.mem.eql(u8, arg, "--ai")) {
             // assume next arg is present for now
@@ -42,7 +41,7 @@ pub fn parseConfigFromArgs(allocator: Allocator) !Config {
             // }
             // cannot switch on strings...
             inline for (@typeInfo(ai.Difficulty).Enum.fields) |f| {
-                std.debug.print("{d} {s}\n", .{ f.value, f.name });
+                // std.debug.print("{d} {s}\n", .{ f.value, f.name });
                 if (std.mem.eql(u8, f.name, aiVal)) {
                     config.aiDifficulty = @enumFromInt(f.value);
 
