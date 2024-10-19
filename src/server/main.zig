@@ -35,7 +35,7 @@ pub fn main() !void {
     });
     defer simpleRouter.deinit();
 
-    var routes = Routes.init(allocator);
+    var routes = Routes.init(allocator, "localhost:3000");
 
     try simpleRouter.handle_func("/api/new-game", &routes, &Routes.newGame);
 
