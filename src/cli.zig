@@ -6,7 +6,7 @@ const fs = std.fs;
 const linux = std.os.linux;
 
 const game = @import("game.zig");
-const game_server = @import("game_server.zig");
+const server = @import("server.zig");
 const Ai = @import("ai.zig").Ai;
 const Navigation = @import("input.zig").Navigation;
 
@@ -25,7 +25,7 @@ const ANSI_NORMAL: []const u8 = "\u{001b}[0m";
 const ANSI_SELECTED: []const u8 = "\u{001b}[7m";
 const CLEAR_TERM: []const u8 = "\x1b[2J\x1b[H";
 
-pub fn mainLoop(server: game_server.UniversalServer) !void {
+pub fn mainLoop(serv: server.UniversalServer) !void {
     const raw = try RawMode.init();
     defer raw.deinit();
     const stdin = std.io.getStdIn().reader().any();
@@ -33,7 +33,7 @@ pub fn mainLoop(server: game_server.UniversalServer) !void {
 
     // get own copy of the state from the iniversal server?
 
-    var localState = server.stateCopy();
+    var localState = serv.stateCopy();
 
     var nav = Navigation.init(game.GAME_SIZE, game.STARTING_POSITION);
 
@@ -50,7 +50,7 @@ pub fn mainLoop(server: game_server.UniversalServer) !void {
             },
             .Select => {
                 // errors are not handled, application will crash
-                const res = try server.handleRequest(.{
+                const res = try serv.handleRequest(.{
                     .makeMove = nav.pos,
                 });
 
