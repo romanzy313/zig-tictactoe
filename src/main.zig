@@ -14,6 +14,13 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     // this main loop needs to create an appropriate server for the game
+    var state = try game.State.init(allocator, game.GAME_SIZE);
+    defer state.deinit(allocator);
 
-    try cli.mainLoop(allocator);
+    // const ai = Ai.init(.Easy);
+
+    // const serv = server.LocalWithAi.init(&state, ai, true);
+    const serv = server.LocalMultiplayer.init(&state, .X);
+
+    try cli.mainLoop(serv);
 }

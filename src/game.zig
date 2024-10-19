@@ -22,6 +22,8 @@ pub const Status = enum {
     }
 };
 
+pub const Player = enum { X, O };
+
 /// coordinates are x = right, y = down
 pub const CellPosition = struct { x: usize, y: usize };
 

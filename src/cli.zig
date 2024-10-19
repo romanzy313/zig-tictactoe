@@ -25,21 +25,16 @@ const ANSI_NORMAL: []const u8 = "\u{001b}[0m";
 const ANSI_SELECTED: []const u8 = "\u{001b}[7m";
 const CLEAR_TERM: []const u8 = "\x1b[2J\x1b[H";
 
-pub fn mainLoop(allocator: std.mem.Allocator) !void {
-    var state = try game.State.init(allocator, game.GAME_SIZE);
-    defer state.deinit(allocator);
-
+pub fn mainLoop(serv: server.LocalMultiplayer) !void {
     const raw = try RawMode.init();
     defer raw.deinit();
     const stdin = std.io.getStdIn().reader().any();
     const stdout = std.io.getStdOut().writer().any();
 
-    const ai = Ai.init(.Easy);
-
-    const serv = server.LocalWithAi.init(&state, ai, true);
+    const state = serv.state;
 
     var nav = Navigation.init(game.GAME_SIZE, game.STARTING_POSITION);
-    try render(stdout, &state, nav.pos, null);
+    try render(stdout, state, nav.pos, null);
 
     while (true) {
         const cmd = try readCommand(stdin);
@@ -51,7 +46,7 @@ pub fn mainLoop(allocator: std.mem.Allocator) !void {
             },
             .Select => {
                 const isPlaying = serv.submitMove(nav.pos) catch |e| {
-                    try render(stdout, &state, nav.pos, e);
+                    try render(stdout, state, nav.pos, e);
                     continue;
                 };
 
@@ -64,10 +59,10 @@ pub fn mainLoop(allocator: std.mem.Allocator) !void {
             .Up => nav.onDir(.Up),
             .Down => nav.onDir(.Down),
         }
-        try render(stdout, &state, nav.pos, null);
+        try render(stdout, state, nav.pos, null);
     }
 
-    try render(stdout, &state, nav.pos, null);
+    try render(stdout, state, nav.pos, null);
     try stdout.print("Game over. Status: {any}\n", .{state.status});
 }
 

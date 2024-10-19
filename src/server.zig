@@ -36,7 +36,25 @@ pub const LocalWithAi = struct {
     }
 };
 
-pub const LocalMultiplayer = struct {};
+pub const LocalMultiplayer = struct {
+    currentPlayer: game.Player,
+    state: *game.State,
+
+    pub fn init(state: *game.State, player: game.Player) LocalMultiplayer {
+        // const state = game.State.init(allocator, 3); // where does this 3 parameter go?
+
+        return .{
+            .state = state,
+            .currentPlayer = player,
+        };
+    }
+
+    // returns true if more moves are pending
+    pub fn submitMove(self: LocalMultiplayer, move: game.CellPosition) !bool {
+        const status = try self.state.makeMove(move);
+        return status.isPlaying();
+    }
+};
 
 // TODO
 // this one still should hold the state! as it will be synced with the server
