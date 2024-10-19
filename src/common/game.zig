@@ -1,7 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Ai = @import("ai.zig").Ai;
-const CliGameHandler = @import("cli.zig").CliGameHandler;
 const assert = std.debug.assert;
 const testing_allocator = std.testing.allocator;
 const testing = std.testing;

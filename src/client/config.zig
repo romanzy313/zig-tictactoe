@@ -2,8 +2,8 @@ const std = @import("std");
 const debug = std.debug;
 const Allocator = std.mem.Allocator;
 
-const game = @import("game.zig");
-const ai = @import("ai.zig");
+const game = @import("common").game;
+const ai = @import("common").ai;
 
 /// Configuration for the application
 pub const Config = struct {

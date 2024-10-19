@@ -1,13 +1,14 @@
 const std = @import("std");
 const debug = std.debug;
 
-const game = @import("game.zig");
+const game = @import("common").game;
+const server = @import("common").server;
+const Ai = @import("common").ai.Ai;
+
 const config = @import("config.zig");
-const server = @import("server.zig");
 const cli = @import("cli.zig");
 const input = @import("input.zig");
-const Ai = @import("ai.zig").Ai;
-const Navigation = @import("input.zig").Navigation;
+const Navigation = input.Navigation;
 
 // this is main for cli only!
 pub fn main() !void {

@@ -1,7 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
 
-const game = @import("game.zig");
+const game = @import("common").game;
 
 pub const Navigation = struct {
     pub const Direction = enum { Left, Down, Up, Right };

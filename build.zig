@@ -38,7 +38,7 @@ pub fn build(b: *std.Build) void {
 
     const exe_client = b.addExecutable(.{
         .name = "zig-tictactoe",
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("src/client/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -50,7 +50,15 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // add dependencies here
+    const vendor_module = b.createModule(.{ .root_source_file = b.path("vendor/vendor.zig") });
+    exe_server.root_module.addImport("vendor", vendor_module);
+
+    // my custom modules
+    const common_module = b.createModule(.{ .root_source_file = b.path("src/common/common.zig") });
+    exe_client.root_module.addImport("common", common_module);
+    exe_server.root_module.addImport("common", common_module);
+
+    // external dependencies
     const zap = b.dependency("zap", .{
         .target = target,
         .optimize = optimize,
@@ -58,12 +66,6 @@ pub fn build(b: *std.Build) void {
     });
 
     exe_server.root_module.addImport("zap", zap.module("zap"));
-
-    const a_module = b.createModule(.{ .root_source_file = b.path("src/ai.zig") });
-    exe_server.root_module.addImport("ai", a_module);
-
-    const vendor_module = b.createModule(.{ .root_source_file = b.path("vendor/vendor.zig") });
-    exe_server.root_module.addImport("vendor", vendor_module);
 
     // exe_server.addObject("src/ai.zig");
 

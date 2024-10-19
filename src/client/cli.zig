@@ -5,9 +5,9 @@ const control_code = std.ascii.control_code;
 const fs = std.fs;
 const linux = std.os.linux;
 
-const game = @import("game.zig");
-const server = @import("server.zig");
-const Ai = @import("ai.zig").Ai;
+const game = @import("common").game;
+const server = @import("common").server;
+const Ai = @import("common").ai.Ai;
 const Navigation = @import("input.zig").Navigation;
 
 pub const CliCommand = enum {

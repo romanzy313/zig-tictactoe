@@ -3,7 +3,7 @@ const json = std.json;
 const Allocator = std.mem.Allocator;
 const zap = @import("zap");
 
-const ai = @import("ai");
+const ai = @import("common").ai;
 const uuid = @import("vendor").uuid;
 
 const logger = std.log.scoped(.routes);
