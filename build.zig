@@ -15,6 +15,13 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
+    // const exe = b.addExecutable(.{
+    //     .name = "zig-tictactoe",
+    //     .root_source_file = b.path("src/main.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+
     const lib = b.addStaticLibrary(.{
         .name = "zig-tictactoe",
         // In this case the main source file is merely a path, however, in more
@@ -29,12 +36,19 @@ pub fn build(b: *std.Build) void {
     // running `zig build`).
     b.installArtifact(lib);
 
+    // moved from here:
     const exe = b.addExecutable(.{
         .name = "zig-tictactoe",
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
+
+    // add dependencies here
+    // run with zig build run -- {args}
+    // should look something like this:
+    // const clap = b.dependency("clap", .{});
+    // exe.root_module.addImport("clap", clap.module("clap"));
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default

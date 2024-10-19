@@ -1,13 +1,13 @@
 const std = @import("std");
 const game = @import("game.zig");
 pub const Difficulty = enum {
-    Easy,
-    Medium,
-    Hard,
+    easy,
+    medium,
+    hard,
 };
 pub fn ComptimeAi(comptime diff: Difficulty) type {
     return switch (diff) {
-        .Easy => struct {
+        .easy => struct {
             pub fn getMove(state: *game.State) game.CellPosition {
                 return easyMove(state);
             }
@@ -26,7 +26,7 @@ pub const Ai = struct {
     }
     pub fn getMove(self: @This(), state: *game.State) game.CellPosition {
         return switch (self.difficulty) {
-            .Easy => easyMove(state),
+            .easy => easyMove(state),
             // else => error.AiDifficultyNotImplmeneted,
             else => @panic("not implmeneted"),
         };
