@@ -6,6 +6,9 @@ const fs = std.fs;
 const linux = std.os.linux;
 
 const game = @import("game.zig");
+const server = @import("server.zig");
+const Ai = @import("ai.zig").Ai;
+const Navigation = @import("input.zig").Navigation;
 
 pub const CliCommand = enum {
     // None,
@@ -21,6 +24,52 @@ pub const CliCommand = enum {
 const ANSI_NORMAL: []const u8 = "\u{001b}[0m";
 const ANSI_SELECTED: []const u8 = "\u{001b}[7m";
 const CLEAR_TERM: []const u8 = "\x1b[2J\x1b[H";
+
+pub fn mainLoop(allocator: std.mem.Allocator) !void {
+    var state = try game.State.init(allocator, game.GAME_SIZE);
+    defer state.deinit(allocator);
+
+    const raw = try RawMode.init();
+    defer raw.deinit();
+    const stdin = std.io.getStdIn().reader().any();
+    const stdout = std.io.getStdOut().writer().any();
+
+    const ai = Ai.init(.Easy);
+
+    const serv = server.LocalWithAi.init(&state, ai, true);
+
+    var nav = Navigation.init(game.GAME_SIZE, game.STARTING_POSITION);
+    try render(stdout, &state, nav.pos, null);
+
+    while (true) {
+        const cmd = try readCommand(stdin);
+
+        switch (cmd) {
+            .Quit => {
+                try stdout.print("Quitting...\n", .{});
+                return;
+            },
+            .Select => {
+                const isPlaying = serv.submitMove(nav.pos) catch |e| {
+                    try render(stdout, &state, nav.pos, e);
+                    continue;
+                };
+
+                if (!isPlaying) {
+                    break;
+                }
+            },
+            .Left => nav.onDir(.Left),
+            .Right => nav.onDir(.Right),
+            .Up => nav.onDir(.Up),
+            .Down => nav.onDir(.Down),
+        }
+        try render(stdout, &state, nav.pos, null);
+    }
+
+    try render(stdout, &state, nav.pos, null);
+    try stdout.print("Game over. Status: {any}\n", .{state.status});
+}
 
 pub fn render(writer: std.io.AnyWriter, state: *const game.State, selection: game.CellPosition, err: ?anyerror) !void {
     try writer.writeAll(CLEAR_TERM);
@@ -53,7 +102,7 @@ pub fn render(writer: std.io.AnyWriter, state: *const game.State, selection: gam
         try writer.print("error: {any}\n", .{err});
     }
 
-    try writer.print("pos: {any}", .{selection});
+    // try writer.print("pos: {any}", .{selection});
 }
 
 pub fn readCommand(reader: std.io.AnyReader) !CliCommand {
