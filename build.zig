@@ -59,6 +59,23 @@ pub fn build(b: *std.Build) void {
 
     exe_server.root_module.addImport("zap", zap.module("zap"));
 
+    const a_module = b.createModule(.{ .root_source_file = b.path("src/ai.zig") });
+    exe_server.root_module.addImport("ai", a_module);
+
+    const vendor_module = b.createModule(.{ .root_source_file = b.path("vendor/vendor.zig") });
+    exe_server.root_module.addImport("vendor", vendor_module);
+
+    // exe_server.addObject("src/ai.zig");
+
+    // const mp_module = b.addModule(
+    //     "ai",
+    //     .{
+    //         .
+    //         //.{ .path = b.pathJoin(&.{ "src", "ai.zig" }) },
+    //     },
+    // );
+    // exe_server.root_module.addImport("ai", mp_module);
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
