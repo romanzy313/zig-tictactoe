@@ -1,9 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-// patrially from
+// partially from
 // https://zig.news/yglcode/code-study-interface-idiomspatterns-in-zig-standard-libraries-4lkj
-
+// this creates an interface from within the abstrctucted constructor
 const Interface = struct {
     pub const VTable = struct {
         say: *const fn (ctx: *anyopaque, msg: []const u8) anyerror!void,

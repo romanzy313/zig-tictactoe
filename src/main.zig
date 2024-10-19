@@ -13,5 +13,7 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+    // this main loop needs to create an appropriate server for the game
+
     try cli.mainLoop(allocator);
 }
