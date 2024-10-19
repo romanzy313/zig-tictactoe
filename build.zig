@@ -51,10 +51,13 @@ pub fn build(b: *std.Build) void {
     });
 
     // add dependencies here
-    // run with zig build run -- {args}
-    // should look something like this:
-    // const clap = b.dependency("clap", .{});
-    // exe.root_module.addImport("clap", clap.module("clap"));
+    const zap = b.dependency("zap", .{
+        .target = target,
+        .optimize = optimize,
+        .openssl = false, // set to true to enable TLS support
+    });
+
+    exe_server.root_module.addImport("zap", zap.module("zap"));
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
