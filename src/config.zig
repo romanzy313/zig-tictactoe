@@ -23,6 +23,15 @@ pub fn parseConfigFromArgs(allocator: Allocator) !Config {
     defer std.process.argsFree(allocator, args);
 
     outer: for (args, 0..) |arg, i| {
+        if (std.mem.count(u8, arg, "help") > 0) {
+            // output to stdout and quit
+            debug.print(
+                \\Help message here
+                \\
+            , .{});
+            return std.process.exit(0);
+        }
+
         // debug.print("parsing {s}\n", .{arg});
         if (std.mem.eql(u8, arg, "--ai")) {
             // assume next arg is present for now

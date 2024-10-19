@@ -23,13 +23,7 @@ pub fn main() !void {
     var state = try game.State.init(allocator, game.GAME_SIZE);
     defer state.deinit(allocator);
 
-    var ai: ?Ai = null;
-
-    if (cfg.aiDifficulty != null) {
-        ai = Ai.init(cfg.aiDifficulty.?);
-    }
-
-    // const ai = Ai.init(.Easy);
+    const ai = if (cfg.aiDifficulty != null) Ai.init(cfg.aiDifficulty.?) else null;
 
     const serv = server.UniversalServer.init(&state, ai, true);
 
