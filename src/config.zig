@@ -22,15 +22,15 @@ pub fn parseConfigFromArgs(allocator: Allocator) !Config {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
+    if (args.len >= 2 and std.mem.eql(u8, args[1], "help")) {
+        debug.print(
+            \\Help message here
+            \\
+        , .{});
+        return std.process.exit(0);
+    }
+
     outer: for (args, 0..) |arg, i| {
-        if (std.mem.count(u8, arg, "help") > 0) {
-            // output to stdout and quit
-            debug.print(
-                \\Help message here
-                \\
-            , .{});
-            return std.process.exit(0);
-        }
 
         // debug.print("parsing {s}\n", .{arg});
         if (std.mem.eql(u8, arg, "--ai")) {
