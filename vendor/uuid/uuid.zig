@@ -26,7 +26,7 @@ pub const UUID = struct {
 
     fn to_string(self: UUID, slice: []u8) void {
         var string: [36]u8 = format_uuid(self);
-        std.mem.copy(u8, slice, &string);
+        std.mem.copyForwards(u8, slice, &string);
     }
 
     pub fn format_uuid(self: UUID) [36]u8 {
@@ -96,6 +96,7 @@ pub const UUID = struct {
             @compileError("Unsupported format specifier for UUID type: '" ++ layout ++ "'.");
 
         const buf = format_uuid(self);
+
         try fmt.format(writer, "{s}", .{buf});
     }
 

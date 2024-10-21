@@ -25,7 +25,7 @@ pub const Status = enum {
 
 pub const PlayerSize = enum { X, O };
 
-pub const PlayerId = []const u8;
+pub const PlayerId = uuid.UUID;
 pub const PlayerKind = enum { human, ai };
 // trying to follow this https://nathancraddock.com/blog/zig-naming-conventions/
 
@@ -37,7 +37,7 @@ pub const AnyPlayer = struct {
 
     pub fn random(kind: PlayerKind) AnyPlayer {
         return .{
-            .id = &uuid.newV4().format_uuid(),
+            .id = uuid.newV4(),
             .kind = kind,
         };
     }

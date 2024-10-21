@@ -3,7 +3,7 @@ const zap = @import("zap");
 const debug = std.debug;
 
 const Routes = @import("Routes.zig");
-const GameRepo = @import("game_repo.zig");
+const GameRepo = @import("game_repo.zig").GameRepo;
 
 fn on_request_verbose(r: zap.Request) void {
     if (r.path) |the_path| {
@@ -31,18 +31,21 @@ pub fn main() !void {
     }){};
     const allocator = gpa.allocator();
 
-    var simpleRouter = zap.Router.init(allocator, .{
+    var simple_router = zap.Router.init(allocator, .{
         .not_found = not_found,
     });
-    defer simpleRouter.deinit();
+    defer simple_router.deinit();
 
-    var routes = Routes.init(allocator, "localhost:3000");
+    var game_repo = GameRepo.init(allocator);
 
-    try simpleRouter.handle_func("/api/new-game", &routes, &Routes.newGame);
+    var routes = Routes.init(allocator, &game_repo, "localhost:3000");
+
+    try simple_router.handle_func("/api/new-game", &routes, &Routes.newGame);
+    try simple_router.handle_func("/api/game-data", &routes, &Routes.getGameData);
 
     var listener = zap.HttpListener.init(.{
         .port = 3000,
-        .on_request = simpleRouter.on_request_handler(),
+        .on_request = simple_router.on_request_handler(),
         .log = true,
         .max_clients = 100000,
     });
@@ -52,8 +55,8 @@ pub fn main() !void {
 
     // start worker threads
     zap.start(.{
-        .threads = 2,
-        .workers = 2,
+        .threads = 1,
+        .workers = 1,
     });
 }
 

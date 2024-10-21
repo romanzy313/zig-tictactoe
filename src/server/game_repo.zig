@@ -6,10 +6,13 @@ const game = common.game;
 const State = common.game.State;
 const uuid = @import("vendor").uuid;
 
+// FIXME: this should always be referenced by a pointer
+// because the amount of data stored is huge!
+// idk what goes on behind the hood now...
 pub const GameInstance = struct {
-    game_id: uuid.UUID, // this is a fixed size though...
-    player_x: game.AnyPlayer,
-    player_o: game.AnyPlayer,
+    gameId: uuid.UUID, // this is a fixed size though...
+    playerX: game.AnyPlayer,
+    playerO: game.AnyPlayer,
     state: State,
     // i need to embed the game.State here...
     // so it must be common, I must register it under a common "module", via build.zig
@@ -21,9 +24,9 @@ pub const GameInstance = struct {
     pub fn initRandom(allocator: Allocator) !GameInstance {
         const state = try game.State.init(allocator, 3);
         return .{
-            .game_id = uuid.newV4(),
-            .player_x = game.AnyPlayer.random(.human), // this needs to be determined
-            .player_o = game.AnyPlayer.random(.ai), // ai id is created here, but ai must be made separately...
+            .gameId = uuid.newV4(),
+            .playerX = game.AnyPlayer.random(.human), // this needs to be determined
+            .playerO = game.AnyPlayer.random(.ai), // ai id is created here, but ai must be made separately...
             .state = state,
         };
     }
@@ -33,37 +36,59 @@ pub const GameInstance = struct {
         self.state.deinit(allocator);
     }
 
-    pub fn gameUrlForPlayerX(self: GameInstance) []const u8 {
-        return "/game?gameId=" ++ self.game_id ++ "&playerId=" ++ self.player_x;
+    pub fn gameUrlForPlayerX(self: *const GameInstance) []const u8 {
+        var buf: [13 + 36 + 10 + 36]u8 = undefined;
+
+        std.debug.print("SELF IS 111 \"{any}\"\n", .{self});
+
+        const res = std.fmt.bufPrint(&buf, "/game?gameId={s}&playerId={s}", .{
+            // self.gameId,
+            // self.playerX.id,
+            "5f1b1a6e-1e3d-4aca-95a7-8b72142d855b",
+            "59322738-e0f2-4caa-a13b-5e5f6bcd0c3e",
+        }) catch |err| {
+            std.debug.print("failed to buffprint !!!! ERR: {any}\n", .{err});
+
+            return "failure";
+        };
+
+        std.debug.print("RES IS IS 111 \"{any}\"\n", .{res});
+
+        return res;
     }
-    pub fn gameUrlForPlayerY(self: GameInstance) []const u8 {
-        return "/game?gameId=" ++ self.game_id ++ "&playerId=" ++ self.player_y;
+
+    /// I still have no idea why this returns garbage
+    /// even though inlining it from where it is called works
+    /// the size of []const u8 is known at compile time, and this should compile to
+    /// "pub fn gameUrlForPlayerX(self: GameInstance) []const u8" above!
+    pub fn gameUrlForPlayerXComptime(self: GameInstance) []const u8 {
+        std.debug.print("SELF IS 222 \"{any}\"\n", .{self});
+
+        return "/game?gameId=" ++ self.gameId.format_uuid() ++ "&playerId=" ++ self.playerX.id.format_uuid();
+    }
+    pub fn gameUrlForPlayerO(self: GameInstance) []const u8 {
+        return "/game?gameId=" ++ self.gameId.format_uuid() ++ "&playerId=" ++ self.playerO.id.format_uuid();
     }
     pub fn gameUrlForPlayer(self: GameInstance, player: game.PlayerKind) []const u8 {
         return switch (player) {
             .X => self.gameUrlForPlayerX(),
-            .Y => self.gameUrlForPlayerY(),
+            .Y => self.gameUrlForPlayerO(),
         };
     }
 };
 
 pub const GameRepo = struct {
     allocator: Allocator,
-    // games: std.StringHashMap(GameInstance),
-    games: std.AutoHashMap(uuid.UUID, GameInstance),
+    games: std.AutoHashMap(uuid.UUID, GameInstance) = undefined,
 
     pub fn init(allocator: Allocator) GameRepo {
-        const games = std.AutoHashMap(uuid.UUID, GameInstance).init(allocator);
         return .{
             .allocator = allocator,
-            .games = games,
+            .games = std.AutoHashMap(uuid.UUID, GameInstance).init(allocator),
         };
     }
 
     pub fn deinit(self: *GameRepo) void {
-        // remove all games first!!!
-        // this is not sufficient, because each allocated state needs deinitialization
-        // self.games.clearAndFree();
         var iter = self.games.valueIterator();
         while (iter.next()) |entry| {
             entry.deinit(self.allocator);
@@ -76,13 +101,13 @@ pub const GameRepo = struct {
     pub fn newGame(self: *GameRepo) !GameInstance {
         const game_instance = try GameInstance.initRandom(self.allocator);
 
-        try self.games.put(game_instance.game_id, game_instance);
+        try self.games.put(game_instance.gameId, game_instance);
 
         return game_instance;
     }
 
-    pub fn get(self: *GameRepo, game_id: uuid.UUID) !GameInstance {
-        return try self.games.get(game_id);
+    pub fn get(self: *GameRepo, game_id: uuid.UUID) ?GameInstance {
+        return self.games.get(game_id);
     }
 
     pub fn delete(self: *GameRepo, game_id: uuid.UUID) bool {
@@ -118,7 +143,7 @@ test "adding and removing games" {
 
     try testing.expectEqual(1, r.games.count());
 
-    const ok = r.delete(g.game_id);
+    const ok = r.delete(g.gameId);
 
     try testing.expect(ok);
 }
