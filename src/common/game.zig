@@ -1,4 +1,6 @@
 const std = @import("std");
+const vendor = @import("vendor");
+const uuid = vendor.uuid;
 const Allocator = std.mem.Allocator;
 const Ai = @import("ai.zig").Ai;
 const assert = std.debug.assert;
@@ -21,17 +23,40 @@ pub const Status = enum {
     }
 };
 
-pub const Player = enum { X, O };
+pub const PlayerSize = enum { X, O };
+
+pub const PlayerId = []const u8;
+pub const PlayerKind = enum { human, ai };
+// trying to follow this https://nathancraddock.com/blog/zig-naming-conventions/
+
+pub const AnyPlayer = struct {
+    id: PlayerId,
+    kind: PlayerKind,
+
+    // allow any initialization here, with a given kind
+
+    pub fn random(kind: PlayerKind) AnyPlayer {
+        return .{
+            .id = &uuid.newV4().format_uuid(),
+            .kind = kind,
+        };
+    }
+};
+
+pub const GamePlayers = struct {
+    x: AnyPlayer,
+    o: AnyPlayer,
+};
 
 /// coordinates are x = right, y = down
 pub const CellPosition = struct { x: usize, y: usize };
 
 pub const CellValue = enum { Empty, X, O };
 
-pub const Grid = [][]CellValue;
+// pub const Grid = [][]CellValue;
 
 pub const State = struct {
-    grid: Grid,
+    grid: [][]CellValue,
     size: usize,
     status: Status,
 

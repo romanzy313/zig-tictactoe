@@ -3,6 +3,7 @@ const zap = @import("zap");
 const debug = std.debug;
 
 const Routes = @import("Routes.zig");
+const GameRepo = @import("game_repo.zig");
 
 fn on_request_verbose(r: zap.Request) void {
     if (r.path) |the_path| {
@@ -54,4 +55,8 @@ pub fn main() !void {
         .threads = 2,
         .workers = 2,
     });
+}
+
+test {
+    _ = @import("game_repo.zig");
 }

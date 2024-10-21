@@ -30,3 +30,9 @@ pub fn main() !void {
 
     try cli.mainLoop(serv);
 }
+
+// tests to evaluate are defined here.
+// hardcoded, as std.testing.refAllDeclsRecursive(@This()); will try to test "@import("common").ai.Ai"
+test {
+    _ = @import("input.zig");
+}

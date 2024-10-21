@@ -15,29 +15,23 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    // const exe = b.addExecutable(.{
+    // why is this needed? i have no library here?
+    // const lib = b.addStaticLibrary(.{
     //     .name = "zig-tictactoe",
-    //     .root_source_file = b.path("src/main.zig"),
+    //     // In this case the main source file is merely a path, however, in more
+    //     // complicated build scripts, this could be a generated file.
+    //     .root_source_file = b.path("src/root.zig"),
     //     .target = target,
     //     .optimize = optimize,
     // });
 
-    const lib = b.addStaticLibrary(.{
-        .name = "zig-tictactoe",
-        // In this case the main source file is merely a path, however, in more
-        // complicated build scripts, this could be a generated file.
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
     // This declares intent for the library to be installed into the standard
     // location when the user invokes the "install" step (the default step when
     // running `zig build`).
-    b.installArtifact(lib);
+    // b.installArtifact(lib);
 
     const exe_client = b.addExecutable(.{
-        .name = "zig-tictactoe",
+        .name = "zig-tictactoe-client",
         .root_source_file = b.path("src/client/main.zig"),
         .target = target,
         .optimize = optimize,
@@ -51,12 +45,29 @@ pub fn build(b: *std.Build) void {
     });
 
     const vendor_module = b.createModule(.{ .root_source_file = b.path("vendor/vendor.zig") });
-    exe_server.root_module.addImport("vendor", vendor_module);
 
-    // my custom modules
-    const common_module = b.createModule(.{ .root_source_file = b.path("src/common/common.zig") });
-    exe_client.root_module.addImport("common", common_module);
-    exe_server.root_module.addImport("common", common_module);
+    // common depends on vendor...
+    // this is quite the pain...
+    const common_module = b.createModule(.{
+        .root_source_file = b.path("src/common/common.zig"),
+    });
+    common_module.addImport("vendor", vendor_module);
+
+    const shared_modules = SharedModules{
+        .b = b,
+        .vendorModule = vendor_module,
+        .commonModule = common_module,
+    };
+
+    // before:
+    // exe_client.root_module.addImport("vendor", vendor_module);
+    // exe_client.root_module.addImport("common", common_module);
+    // exe_server.root_module.addImport("vendor", vendor_module);
+    // exe_server.root_module.addImport("common", common_module);
+
+    // after:
+    shared_modules.addModulesToExe(&exe_client.root_module);
+    shared_modules.addModulesToExe(&exe_server.root_module);
 
     // external dependencies
     const zap = b.dependency("zap", .{
@@ -82,6 +93,7 @@ pub fn build(b: *std.Build) void {
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(exe_client);
+    b.installArtifact(exe_server);
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
@@ -112,29 +124,77 @@ pub fn build(b: *std.Build) void {
     const run_step_server = b.step("server", "Run the server");
     run_step_server.dependOn(&run_cmd_server.step);
 
-    // Creates a step for unit testing. This only builds the test executable
-    // but does not run it.
-    // Unit tests are the same for client and server!
-    const lib_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/root.zig"),
+    // TESTS
+    // common tests
+    const tests_common = b.addTest(.{
+        .root_source_file = b.path("src/common/common.zig"),
         .target = target,
         .optimize = optimize,
     });
+    shared_modules.addModulesToExe(&tests_common.root_module);
+    const run_tests_common = b.addRunArtifact(tests_common);
 
-    const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
-
-    const exe_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
+    const tests_client = b.addTest(.{
+        .root_source_file = b.path("src/client/main.zig"),
         .target = target,
         .optimize = optimize,
     });
+    shared_modules.addModulesToExe(&tests_client.root_module);
+    const run_tests_client = b.addRunArtifact(tests_client);
 
-    const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
+    const tests_server = b.addTest(.{
+        .root_source_file = b.path("src/server/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    shared_modules.addModulesToExe(&tests_server.root_module);
+    const run_tests_server = b.addRunArtifact(tests_server);
 
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_lib_unit_tests.step);
-    test_step.dependOn(&run_exe_unit_tests.step);
+    test_step.dependOn(&run_tests_common.step);
+    test_step.dependOn(&run_tests_client.step);
+    test_step.dependOn(&run_tests_server.step);
+
+    // OLD
+    // there is a separate lib and "executable tests..."
+
+    // Creates a step for unit testing. This only builds the test executable
+    // but does not run it.
+    // Unit tests are the same for client and server!
+    // const lib_unit_tests = b.addTest(.{
+    //     .root_source_file = b.path("src/root.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+
+    // const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
+
+    // const exe_unit_tests_client = b.addTest(.{
+    //     .root_source_file = b.path("src/client/main.zig"), // FIXME: what should be done here?
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+
+    // const run_exe_unit_tests_client = b.addRunArtifact(exe_unit_tests_client);
+
+    // Similar to creating the run step earlier, this exposes a `test` step to
+    // the `zig build --help` menu, providing a way for the user to request
+    // running the unit tests.
+    // const test_step = b.step("test", "Run unit tests");
+    // test_step.dependOn(&run_lib_unit_tests.step);
+    // test_step.dependOn(&run_exe_unit_tests_client.step);
 }
+
+const SharedModules = struct {
+    b: *std.Build,
+    vendorModule: *std.Build.Module,
+    commonModule: *std.Build.Module,
+
+    fn addModulesToExe(self: SharedModules, module: *std.Build.Module) void {
+        module.addImport("vendor", self.vendorModule);
+        module.addImport("common", self.commonModule);
+    }
+};

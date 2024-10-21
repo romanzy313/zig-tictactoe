@@ -46,3 +46,7 @@ test Navigation {
     // WARNING: this provides really bad feedback on error.
     try testing.expectEqual(game.CellPosition{ .x = 1, .y = 0 }, nav.pos);
 }
+
+// test "failing" {
+//     try testing.expect(false);
+// }
