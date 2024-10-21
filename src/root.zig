@@ -8,4 +8,6 @@ comptime {
 
     _ = @import("client/cli.zig");
     _ = @import("client/input.zig");
+
+    _ = @import("server/game_repo.zig");
 }
