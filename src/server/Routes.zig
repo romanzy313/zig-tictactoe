@@ -57,7 +57,7 @@ pub fn newGame(self: *Routes, req: zap.Request) void {
         req.setStatus(.internal_server_error);
         return req.sendBody("failed to create a new game") catch unreachable; // unreachable is nervewrecking
     };
-    const inst = self.gameRepo.get(temp.gameId).?;
+    var inst = self.gameRepo.get(temp.gameId).?;
 
     // var inviteUrl: ?[]const u8 = null;
 
@@ -67,6 +67,10 @@ pub fn newGame(self: *Routes, req: zap.Request) void {
     //     inviteUrl = inst.gameUrlForPlayerO(); // self.hostname ++
 
     // }
+
+    // maybe its not my issue.
+    // maybe its zap and whatever it does when dispatching a request:
+    // .bound => |b| @call(.auto, @as(BoundHandler, @ptrFromInt(b.handler)), .{ @as(*anyopaque, @ptrFromInt(b.instance)), r }),
 
     const same_thing_away = inst.gameUrlForPlayerX();
     const const_here = "/game?gameId=" ++ inst.gameId.format_uuid() ++ "&playerId=" ++ inst.playerX.id.format_uuid();

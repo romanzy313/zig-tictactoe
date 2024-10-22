@@ -6,10 +6,13 @@ const game = common.game;
 const State = common.game.State;
 const uuid = @import("vendor").uuid;
 
+const Mutex = std.Thread.Mutex;
+
 // FIXME: this should always be referenced by a pointer
 // because the amount of data stored is huge!
 // idk what goes on behind the hood now...
 pub const GameInstance = struct {
+    mutex: Mutex,
     gameId: uuid.UUID, // this is a fixed size though...
     playerX: game.AnyPlayer,
     playerO: game.AnyPlayer,
@@ -24,6 +27,7 @@ pub const GameInstance = struct {
     pub fn initRandom(allocator: Allocator) !GameInstance {
         const state = try game.State.init(allocator, 3);
         return .{
+            .mutex = Mutex{},
             .gameId = uuid.newV4(),
             .playerX = game.AnyPlayer.random(.human), // this needs to be determined
             .playerO = game.AnyPlayer.random(.ai), // ai id is created here, but ai must be made separately...
@@ -31,12 +35,15 @@ pub const GameInstance = struct {
         };
     }
 
-    pub fn deinit(self: GameInstance, allocator: Allocator) void {
+    pub fn deinit(self: *GameInstance, allocator: Allocator) void {
         // allocator.free(self.state);
         self.state.deinit(allocator);
     }
 
-    pub fn gameUrlForPlayerX(self: *const GameInstance) []const u8 {
+    pub fn gameUrlForPlayerX(self: *GameInstance) []const u8 {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
         var buf: [13 + 36 + 10 + 36]u8 = undefined;
 
         std.debug.print("SELF IS 111 \"{any}\"\n", .{self});
@@ -61,15 +68,19 @@ pub const GameInstance = struct {
     /// even though inlining it from where it is called works
     /// the size of []const u8 is known at compile time, and this should compile to
     /// "pub fn gameUrlForPlayerX(self: GameInstance) []const u8" above!
-    pub fn gameUrlForPlayerXComptime(self: GameInstance) []const u8 {
+    pub fn gameUrlForPlayerXComptime(self: *GameInstance) []const u8 {
+        self.mutex.lock();
+        defer self.mutex.unlock();
         std.debug.print("SELF IS 222 \"{any}\"\n", .{self});
 
         return "/game?gameId=" ++ self.gameId.format_uuid() ++ "&playerId=" ++ self.playerX.id.format_uuid();
     }
-    pub fn gameUrlForPlayerO(self: GameInstance) []const u8 {
+    pub fn gameUrlForPlayerO(self: *GameInstance) []const u8 {
+        self.mutex.lock();
+        defer self.mutex.unlock();
         return "/game?gameId=" ++ self.gameId.format_uuid() ++ "&playerId=" ++ self.playerO.id.format_uuid();
     }
-    pub fn gameUrlForPlayer(self: GameInstance, player: game.PlayerKind) []const u8 {
+    pub fn gameUrlForPlayer(self: *GameInstance, player: game.PlayerKind) []const u8 {
         return switch (player) {
             .X => self.gameUrlForPlayerX(),
             .Y => self.gameUrlForPlayerO(),
