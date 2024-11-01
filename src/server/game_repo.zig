@@ -122,7 +122,7 @@ pub const GameRepo = struct {
     }
 
     pub fn delete(self: *GameRepo, game_id: uuid.UUID) bool {
-        const val = self.games.get(game_id);
+        var val = self.games.get(game_id);
 
         // std.debug.print("???? game_id={s}, val={any} \n", .{ game_id, val });
 
@@ -153,6 +153,7 @@ test "adding and removing games" {
     const g = try r.newGame();
 
     try testing.expectEqual(1, r.games.count());
+    try testing.expectEqual(3, g.state.size);
 
     const ok = r.delete(g.gameId);
 
