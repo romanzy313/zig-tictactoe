@@ -29,7 +29,7 @@ pub const UUID = struct {
         std.mem.copyForwards(u8, slice, &string);
     }
 
-    // this should not be used externally, as buffer memory locality is violated???
+    // FIXME: allow this exposed for simplicity?
     pub fn format_uuid(self: UUID) [36]u8 {
         var buf: [36]u8 = undefined;
         buf[8] = '-';
@@ -118,6 +118,25 @@ pub const UUID = struct {
 
         return uuid;
     }
+
+    // source https://www.aolium.com/karlseguin/46252c5b-587a-c419-be96-a0ccc2f11de4
+    pub fn jsonStringify(self: UUID, out: anytype) !void {
+        return out.print("\"{s}\"", .{self.format_uuid()});
+    }
+
+    // source https://www.openmymind.net/Custom-String-Formatting-And-JSON-in-Zig/
+    pub fn jsonParse(
+        allocator: std.mem.Allocator,
+        source: anytype,
+        _: std.json.ParseOptions,
+    ) !UUID {
+        switch (try source.nextAlloc(allocator, .alloc_if_needed)) {
+            .string, .allocated_string => |value| {
+                return parse(value) catch error.InvalidCharacter;
+            },
+            else => return error.UnexpectedToken,
+        }
+    }
 };
 
 // Zero UUID
@@ -169,4 +188,45 @@ test "check to_string works" {
     std.debug.print("\nFirst  call to_string {s} \n", .{string1});
     std.debug.print("Second call to_string {s} \n", .{string2});
     try testing.expectEqual(string1, string2);
+}
+
+test "jsonStringify" {
+    //
+    const uuid = UUID{
+        .bytes = [_]u8{ 0x12, 0x34, 0x56, 0x78, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+    };
+    const T = struct { id: UUID };
+    const res = try std.json.stringifyAlloc(testing.allocator, T{
+        .id = uuid,
+    }, .{});
+    defer testing.allocator.free(res);
+    try testing.expectEqualStrings("{\"id\":\"12345678-0000-0000-0000-000000000000\"}", res);
+
+    const res2 = try std.json.stringifyAlloc(testing.allocator, uuid, .{});
+    defer testing.allocator.free(res2);
+    try testing.expectEqualStrings("\"12345678-0000-0000-0000-000000000000\"", res2);
+}
+
+test "jsonParse" {
+    const T = struct { id: UUID };
+
+    const res = try std.json.parseFromSlice(
+        T,
+        std.testing.allocator,
+        "{\"id\": \"12345678-0000-0000-0000-000000000000\"}",
+        .{},
+    );
+    defer res.deinit();
+    try testing.expectEqual([_]u8{ 0x12, 0x34, 0x56, 0x78, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, res.value.id.bytes);
+}
+
+test "bad jsonParse" {
+    const T = struct { id: UUID };
+
+    try testing.expectError(error.UnexpectedToken, std.json.parseFromSlice(
+        T,
+        std.testing.allocator,
+        "{\"id\": 123123}",
+        .{},
+    ));
 }

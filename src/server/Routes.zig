@@ -77,7 +77,7 @@ pub fn newGame(self: *Routes, req: zap.Request) void {
 }
 
 pub const GetGameDataReq = struct {
-    gameId: []const u8,
+    gameId: uuid.UUID,
 };
 
 pub fn getGame(self: *Routes, req: zap.Request) void {
@@ -87,15 +87,14 @@ pub fn getGame(self: *Routes, req: zap.Request) void {
         return req.sendError(err, if (@errorReturnTrace()) |t| t.* else null, 500);
     };
     defer body.deinit();
-
-    const game_id_as_uuid = uuid.UUID.parse(body.value.gameId) catch |err| {
-        return req.sendError(err, null, 502);
-    };
-
-    const inst = self.gameRepo.get(game_id_as_uuid);
+    const gameId = body.value.gameId;
+    const inst = self.gameRepo.get(gameId);
 
     if (inst == null) {
-        return req.sendBody("instance with id" ++ game_id_as_uuid.format_uuid() ++ " not found!") catch return;
+        // const err = std.fmt.comptimePrint("instance with id {s} not found", .{gameId});
+        // const err = std.fmt.allocPrint(self.allocator, "instance with id {s} not found", .{gameId}) catch return; // error handling is not nice...
+        // defer self.allocator.free(err);
+        return req.sendError(error.InvalidGameId, null, 400);
     }
 
     const res = json.stringifyAlloc(self.allocator, inst.?, .{}) catch return;
