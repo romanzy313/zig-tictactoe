@@ -83,18 +83,16 @@ pub const GameRepo = struct {
         return self.games.get(game_id);
     }
 
-    // example from here, need to dupe everything, not nice
+    // example from here, which dupes everything, which I am not doing...
     // https://github.com/cztomsik/tokamak/blob/main/examples/blog/src/model.zig
-    pub fn getAll(self: *GameRepo) ![]const GameInstance {
+    pub fn getAllOwned(self: *GameRepo) ![]const GameInstance {
         var res = std.ArrayList(GameInstance).init(self.allocator);
-        errdefer res.deinit(); // why error defer?
-        // defer res.deinit(); // why error defer?
+        errdefer res.deinit(); // because toOwnSlice releases "memory lock"
 
         var iter = self.games.iterator();
 
-        while (iter.next()) |game3| {
-            try res.append(game3.value_ptr.*);
-            // try res.append(game);
+        while (iter.next()) |v| {
+            try res.append(v.value_ptr.*);
         }
 
         return res.toOwnedSlice();

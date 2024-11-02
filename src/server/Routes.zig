@@ -53,9 +53,9 @@ pub fn newGame(self: *Routes, req: zap.Request) void {
     };
     // this needs to deinit it... again
     const player_url = game.gameUrlForPlayerX(self.allocator) catch unreachable;
-    defer self.gameRepo.allocator.free(player_url);
+    defer self.allocator.free(player_url); // zig is not javascript !
     const invite_url = game.gameUrlForPlayerO(self.allocator) catch unreachable;
-    defer self.gameRepo.allocator.free(invite_url);
+    defer self.allocator.free(invite_url);
 
     // encode the response
     const res: []const u8 = json.stringifyAlloc(
@@ -104,10 +104,8 @@ pub fn getGame(self: *Routes, req: zap.Request) void {
     req.sendJson(res) catch return;
 }
 
-pub fn getAllgames(self: *Routes, req: zap.Request) void {
-    // self.gameRepo.games.
-
-    const allOwned = self.gameRepo.getAll() catch |err| {
+pub fn getAllGames(self: *Routes, req: zap.Request) void {
+    const allOwned = self.gameRepo.getAllOwned() catch |err| {
         return req.sendError(err, if (@errorReturnTrace()) |t| t.* else null, 500);
     };
     defer self.gameRepo.allocator.free(allOwned); // ugly but works

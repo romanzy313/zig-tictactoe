@@ -52,7 +52,7 @@ pub fn main() !void {
 
     try simple_router.handle_func("/api/new-game", &routes, &Routes.newGame);
     try simple_router.handle_func("/api/game", &routes, &Routes.getGame);
-    try simple_router.handle_func("/api/all-games", &routes, &Routes.getAllgames);
+    try simple_router.handle_func("/api/all-games", &routes, &Routes.getAllGames);
 
     var listener = zap.HttpListener.init(.{
         .port = 3000,
