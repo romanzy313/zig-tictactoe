@@ -29,6 +29,15 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{
         .thread_safe = true,
     }){};
+
+    defer {
+        const check = gpa.deinit();
+
+        if (check == .leak) {
+            debug.print("THERE WAS A LEAK !!!1!\n", .{});
+        }
+    }
+
     const allocator = gpa.allocator();
 
     var simple_router = zap.Router.init(allocator, .{
@@ -37,11 +46,13 @@ pub fn main() !void {
     defer simple_router.deinit();
 
     var game_repo = GameRepo.init(allocator);
+    defer game_repo.deinit();
 
     var routes = Routes.init(allocator, &game_repo, "localhost:3000");
 
     try simple_router.handle_func("/api/new-game", &routes, &Routes.newGame);
-    try simple_router.handle_func("/api/game-data", &routes, &Routes.getGameData);
+    try simple_router.handle_func("/api/game", &routes, &Routes.getGame);
+    try simple_router.handle_func("/api/all-games", &routes, &Routes.getAllgames);
 
     var listener = zap.HttpListener.init(.{
         .port = 3000,

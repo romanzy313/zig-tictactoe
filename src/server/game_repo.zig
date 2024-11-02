@@ -12,13 +12,10 @@ const Mutex = std.Thread.Mutex;
 // because the amount of data stored is huge!
 // idk what goes on behind the hood now...
 pub const GameInstance = struct {
-    mutex: Mutex,
     gameId: uuid.UUID, // this is a fixed size though...
     playerX: game.AnyPlayer,
     playerO: game.AnyPlayer,
     state: State,
-    // i need to embed the game.State here...
-    // so it must be common, I must register it under a common "module", via build.zig
 
     // dont forget to deinit state!
     // any player could be an AI though...
@@ -27,7 +24,6 @@ pub const GameInstance = struct {
     pub fn initRandom(allocator: Allocator) !GameInstance {
         const state = try game.State.init(allocator, 3);
         return .{
-            .mutex = Mutex{},
             .gameId = uuid.newV4(),
             .playerX = game.AnyPlayer.random(.human), // this needs to be determined
             .playerO = game.AnyPlayer.random(.ai), // ai id is created here, but ai must be made separately...
@@ -40,48 +36,14 @@ pub const GameInstance = struct {
         self.state.deinit(allocator);
     }
 
-    pub fn gameUrlForPlayerX(self: *GameInstance) []const u8 {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        var buf: [13 + 36 + 10 + 36]u8 = undefined;
-
-        std.debug.print("SELF IS 111 \"{any}\"\n", .{self});
-
-        const res = std.fmt.bufPrint(&buf, "/game?gameId={s}&playerId={s}", .{
-            // self.gameId,
-            // self.playerX.id,
-            "5f1b1a6e-1e3d-4aca-95a7-8b72142d855b",
-            "59322738-e0f2-4caa-a13b-5e5f6bcd0c3e",
-        }) catch |err| {
-            std.debug.print("failed to buffprint !!!! ERR: {any}\n", .{err});
-
-            return "failure";
-        };
-
-        std.debug.print("RES IS IS 111 \"{any}\"\n", .{res});
-
-        return res;
+    pub fn gameUrlForPlayerX(self: *GameInstance, allocator: Allocator) ![]const u8 {
+        return try std.fmt.allocPrint(allocator, "/game?gameId={s}&playerId={s}", .{ self.gameId, self.playerX.id });
     }
-
-    /// I still have no idea why this returns garbage
-    /// even though inlining it from where it is called works
-    /// the size of []const u8 is known at compile time, and this should compile to
-    /// "pub fn gameUrlForPlayerX(self: GameInstance) []const u8" above!
-    pub fn gameUrlForPlayerXComptime(self: *GameInstance) []const u8 {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        std.debug.print("SELF IS 222 \"{any}\"\n", .{self});
-
-        return "/game?gameId=" ++ self.gameId.format_uuid() ++ "&playerId=" ++ self.playerX.id.format_uuid();
+    pub fn gameUrlForPlayerO(self: *GameInstance, allocator: Allocator) ![]const u8 {
+        return try std.fmt.allocPrint(allocator, "/game?gameId={s}&playerId={s}", .{ self.gameId, self.playerO.id });
     }
-    pub fn gameUrlForPlayerO(self: *GameInstance) []const u8 {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-        return "/game?gameId=" ++ self.gameId.format_uuid() ++ "&playerId=" ++ self.playerO.id.format_uuid();
-    }
-    pub fn gameUrlForPlayer(self: *GameInstance, player: game.PlayerKind) []const u8 {
-        return switch (player) {
+    pub fn gameUrlForPlayer(self: *GameInstance, player: game.PlayerKind) ![]const u8 {
+        return try switch (player) {
             .X => self.gameUrlForPlayerX(),
             .Y => self.gameUrlForPlayerO(),
         };
@@ -90,7 +52,7 @@ pub const GameInstance = struct {
 
 pub const GameRepo = struct {
     allocator: Allocator,
-    games: std.AutoHashMap(uuid.UUID, GameInstance) = undefined,
+    games: std.AutoHashMap(uuid.UUID, GameInstance),
 
     pub fn init(allocator: Allocator) GameRepo {
         return .{
@@ -119,6 +81,23 @@ pub const GameRepo = struct {
 
     pub fn get(self: *GameRepo, game_id: uuid.UUID) ?GameInstance {
         return self.games.get(game_id);
+    }
+
+    // example from here, need to dupe everything, not nice
+    // https://github.com/cztomsik/tokamak/blob/main/examples/blog/src/model.zig
+    pub fn getAll(self: *GameRepo) ![]const GameInstance {
+        var res = std.ArrayList(GameInstance).init(self.allocator);
+        errdefer res.deinit(); // why error defer?
+        // defer res.deinit(); // why error defer?
+
+        var iter = self.games.iterator();
+
+        while (iter.next()) |game3| {
+            try res.append(game3.value_ptr.*);
+            // try res.append(game);
+        }
+
+        return res.toOwnedSlice();
     }
 
     pub fn delete(self: *GameRepo, game_id: uuid.UUID) bool {

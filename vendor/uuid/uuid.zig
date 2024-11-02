@@ -29,6 +29,7 @@ pub const UUID = struct {
         std.mem.copyForwards(u8, slice, &string);
     }
 
+    // this should not be used externally, as buffer memory locality is violated???
     pub fn format_uuid(self: UUID) [36]u8 {
         var buf: [36]u8 = undefined;
         buf[8] = '-';
