@@ -6,6 +6,8 @@
 const std = @import("std");
 const crypto = std.crypto;
 const fmt = std.fmt;
+const json = std.json;
+const Allocator = std.mem.Allocator;
 const testing = std.testing;
 
 pub const Error = error{InvalidUUID};
@@ -26,7 +28,7 @@ pub const UUID = struct {
 
     fn to_string(self: UUID, slice: []u8) void {
         var string: [36]u8 = format_uuid(self);
-        std.mem.copyForwards(u8, slice, &string);
+        @memcpy(slice, &string);
     }
 
     // FIXME: allow this exposed for simplicity?
@@ -119,16 +121,14 @@ pub const UUID = struct {
         return uuid;
     }
 
-    // source https://www.aolium.com/karlseguin/46252c5b-587a-c419-be96-a0ccc2f11de4
     pub fn jsonStringify(self: UUID, out: anytype) !void {
         return out.print("\"{s}\"", .{self.format_uuid()});
     }
 
-    // source https://www.openmymind.net/Custom-String-Formatting-And-JSON-in-Zig/
     pub fn jsonParse(
-        allocator: std.mem.Allocator,
+        allocator: Allocator,
         source: anytype,
-        _: std.json.ParseOptions,
+        _: json.ParseOptions,
     ) !UUID {
         switch (try source.nextAlloc(allocator, .alloc_if_needed)) {
             .string, .allocated_string => |value| {
@@ -138,6 +138,9 @@ pub const UUID = struct {
         }
     }
 };
+
+// source https://www.aolium.com/karlseguin/46252c5b-587a-c419-be96-a0ccc2f11de4
+// source https://www.openmymind.net/Custom-String-Formatting-And-JSON-in-Zig/
 
 // Zero UUID
 pub const zero: UUID = .{ .bytes = .{0} ** 16 };
@@ -191,18 +194,17 @@ test "check to_string works" {
 }
 
 test "jsonStringify" {
-    //
     const uuid = UUID{
         .bytes = [_]u8{ 0x12, 0x34, 0x56, 0x78, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
     };
     const T = struct { id: UUID };
-    const res = try std.json.stringifyAlloc(testing.allocator, T{
+    const res = try json.stringifyAlloc(testing.allocator, T{
         .id = uuid,
     }, .{});
     defer testing.allocator.free(res);
     try testing.expectEqualStrings("{\"id\":\"12345678-0000-0000-0000-000000000000\"}", res);
 
-    const res2 = try std.json.stringifyAlloc(testing.allocator, uuid, .{});
+    const res2 = try json.stringifyAlloc(testing.allocator, uuid, .{});
     defer testing.allocator.free(res2);
     try testing.expectEqualStrings("\"12345678-0000-0000-0000-000000000000\"", res2);
 }
@@ -210,9 +212,9 @@ test "jsonStringify" {
 test "jsonParse" {
     const T = struct { id: UUID };
 
-    const res = try std.json.parseFromSlice(
+    const res = try json.parseFromSlice(
         T,
-        std.testing.allocator,
+        testing.allocator,
         "{\"id\": \"12345678-0000-0000-0000-000000000000\"}",
         .{},
     );
@@ -223,9 +225,9 @@ test "jsonParse" {
 test "bad jsonParse" {
     const T = struct { id: UUID };
 
-    try testing.expectError(error.UnexpectedToken, std.json.parseFromSlice(
+    try testing.expectError(error.UnexpectedToken, json.parseFromSlice(
         T,
-        std.testing.allocator,
+        testing.allocator,
         "{\"id\": 123123}",
         .{},
     ));
