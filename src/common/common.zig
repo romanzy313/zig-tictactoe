@@ -1,5 +1,5 @@
 const std = @import("std");
-pub const ai = @import("ai.zig");
+pub const ai = @import("Ai.zig");
 pub const game = @import("game.zig");
 pub const server = @import("server.zig");
 

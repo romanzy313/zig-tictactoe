@@ -2,7 +2,15 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const game = @import("game.zig");
-const Ai = @import("ai.zig").Ai;
+const Ai = @import("Ai.zig");
+
+// this is a game server, not in a webserver sence
+// this is a handler which deals with implementation of AI and local multiplayer
+
+// it handles events from the server and resolves its own state
+// main function is to define local vs remote
+// local will do direct passing of the server
+// and remote will use websockets and send events that way
 
 pub const LocalWithAi = struct {
     state: *game.State,
