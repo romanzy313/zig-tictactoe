@@ -42,12 +42,36 @@ pub const Client = union(enum) {
         }
     }
 };
+// const RenderFn = fn () void;
+// pub const Renderer = struct {
+//     count: usize = 0,
+//     allocFn: fn (self: *Allocator, byte_count: usize, alignment: u29) anyerror![]u8,
+//     pub fn onUpdate(self: *Renderer) void {
+//         self.count += 1;
+//     }
+// };
+
+// i guess I need to be an interface. I must provide pointer to self + a function to handle the updates
+// i can do "vtable_from_inside" method. the oassed struct must implement .onStateChanged()
+// these clients must save the pointer of a callback and its function, and pass the pointer in explicitly.
+// additionally, errors must be sent somehow, and errors must be a []const u8? but then its allocator city
+// const RenderFn = fn(err: anyerror) void; // errors can be sent too... I can send them separately though
+
+// OR
+// i could just pass the handler directly, as the game is meant to be ran on cli.
+// What if gui is needed (even when I cant find a nice framework)? how to do the testing of this? or do full end-to-end testing
+
+// hmmm, how to do onStateChange?
+// pub OnStateChange1 = *const fn (*anyopaque, game.ResolvedState) void;
 
 pub const LocalClient = struct {
     allocator: Allocator,
     state: game.ResolvedState, // why cant this be a pointer?
 
-    pub fn init(allocator: Allocator, start_event: events.StartGameEvent) !LocalClient {
+    ptrHandler: *anyopaque,
+    onStateChange: *const fn (ctx: *anyopaque, state: game.ResolvedState) void,
+
+    pub fn init(allocator: Allocator, start_event: events.StartGameEvent, obj: anytype) !LocalClient {
         var state = try game.ResolvedState.init(allocator, start_event);
         errdefer state.deinit(allocator);
 
@@ -71,10 +95,23 @@ pub const LocalClient = struct {
                 }
             },
         }
+        // create callback binding
+        const Ptr = @TypeOf(obj);
+        const onStateChange = struct {
+            fn cb(ptr: *anyopaque, _state: game.ResolvedState) void {
+                const self: Ptr = @ptrCast(@alignCast(ptr));
+                self.onStateChange(_state);
+            }
+        }.cb;
+
+        // always emit state change at the start of the game
+        onStateChange(obj, state);
 
         return .{
             .allocator = allocator,
             .state = state,
+            .ptrHandler = obj,
+            .onStateChange = onStateChange,
         };
     }
 
@@ -97,14 +134,17 @@ pub const LocalClient = struct {
                 },
             });
         }
+        self.onStateChange(self.ptrHandler, self.state);
     }
 };
 
 // try using this https://github.com/karlseguin/websocket.zig
+// remote ai will emit events as it is
 pub const RemoteClient = struct {
     allocator: Allocator,
     connInfo: ConnectionInfo,
     state: game.ResolvedState,
+    // todo onStateChange: *const fn (ctx: *anyopaque, state: game.ResolvedState) void,
 
     const ConnectionInfo = struct {
         serverUrl: []const u8,
@@ -145,6 +185,8 @@ pub const RemoteClient = struct {
         };
     }
 
+    // also need a function to init already running game?
+
     pub fn deinit(self: *RemoteClient) void {
         self.state.deinit(self.allocator);
         // self.state.* = undefined; // TODO: ive seen this somewhere, not sure if its needed
@@ -168,13 +210,26 @@ pub const RemoteClient = struct {
 };
 
 const testing_allocator = testing.allocator;
+
+const testGameHandler = struct {
+    count: usize = 0,
+
+    fn onStateChange(self: *testGameHandler, state: game.ResolvedState) void {
+        // std.debug.print("state change happening. seqId: {d}\n", .{state.seqId});
+        _ = state;
+        self.count += 1;
+    }
+};
+
 test LocalClient {
+    var instance = testGameHandler{};
     var client = Client{
         .local = try LocalClient.init(
             testing_allocator,
             .{
                 .withAi = .{ .aiDifficulty = .easy, .boardSize = 3, .playerSide = .O },
             },
+            &instance,
         ),
     };
 
@@ -183,10 +238,12 @@ test LocalClient {
     // FIXME: use hard AI which will always make the best move in the center (its predictable)
     // for now dumest non-prod is used
     // or use easy ai with a initialization seed
+    try testing.expectEqual(1, instance.count);
     try testing.expectEqual(.TurnO, client.state().status);
     try testing.expectEqual(.X, client.state().grid[0][0]);
 
     try client.handleEvent(.{ .makeMove = .{ .position = .{ .x = 1, .y = 1 } } });
+    try testing.expectEqual(2, instance.count);
     try testing.expectEqual(.TurnO, client.state().status);
     try testing.expectEqual(.O, client.state().grid[1][1]);
     try testing.expectEqual(.X, client.state().grid[0][1]); // this is hardcoded for now
@@ -196,4 +253,9 @@ test LocalClient {
     // client.state().grid[2][2] = .X;
     // var state = client.state();
     // state.debugPrint();
+
+    // can i mutate it deeply when its not even a pointer?
+    // no I cant!
+    // instance.state.seqId = 69;
+    // try testing.expectEqual(69, client.state().seqId);
 }
