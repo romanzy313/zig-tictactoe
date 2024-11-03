@@ -37,10 +37,10 @@ pub const LocalWithAi = struct {
 };
 
 pub const LocalMultiplayer = struct {
-    currentPlayer: game.PlayerSize,
+    currentPlayer: game.PlayerSide,
     state: *game.State,
 
-    pub fn init(state: *game.State, player: game.PlayerSize) LocalMultiplayer {
+    pub fn init(state: *game.State, player: game.PlayerSide) LocalMultiplayer {
         // const state = game.State.init(allocator, 3); // where does this 3 parameter go?
 
         return .{

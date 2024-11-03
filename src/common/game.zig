@@ -8,9 +8,6 @@ const testing_allocator = std.testing.allocator;
 const testing = std.testing;
 const ArrayList = std.ArrayList;
 
-pub const GAME_SIZE = 3;
-pub const STARTING_POSITION: CellPosition = .{ .x = 1, .y = 1 };
-
 pub const Status = enum {
     Stalemate,
     TurnX,
@@ -23,7 +20,7 @@ pub const Status = enum {
     }
 };
 
-pub const PlayerSize = enum { X, O };
+pub const PlayerSide = enum { X, O };
 
 pub const PlayerId = uuid.UUID;
 pub const PlayerKind = enum { human, ai };
