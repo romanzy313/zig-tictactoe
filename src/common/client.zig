@@ -68,9 +68,11 @@ pub const LocalClient = struct {
     allocator: Allocator,
     state: game.ResolvedState, // why cant this be a pointer?
 
-    ptrHandler: *anyopaque,
+    handlerPtr: *anyopaque,
     onStateChange: *const fn (ctx: *anyopaque, state: game.ResolvedState) void,
 
+    /// obj must implement the following function:
+    /// fn onStateChange(self: *@This(), state: game.ResolvedState) void {}
     pub fn init(allocator: Allocator, start_event: events.StartGameEvent, obj: anytype) !LocalClient {
         var state = try game.ResolvedState.init(allocator, start_event);
         errdefer state.deinit(allocator);
@@ -134,7 +136,7 @@ pub const LocalClient = struct {
                 },
             });
         }
-        self.onStateChange(self.ptrHandler, self.state);
+        self.onStateChange(self.handlerPtr, self.state);
     }
 };
 
@@ -214,7 +216,7 @@ const testing_allocator = testing.allocator;
 const testGameHandler = struct {
     count: usize = 0,
 
-    fn onStateChange(self: *testGameHandler, state: game.ResolvedState) void {
+    fn onStateChange(self: *@This(), state: game.ResolvedState) void {
         // std.debug.print("state change happening. seqId: {d}\n", .{state.seqId});
         _ = state;
         self.count += 1;
