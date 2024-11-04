@@ -112,7 +112,7 @@ pub const LocalClient = struct {
         return .{
             .allocator = allocator,
             .state = state,
-            .ptrHandler = obj,
+            .handlerPtr = obj,
             .onStateChange = onStateChange,
         };
     }
@@ -127,7 +127,8 @@ pub const LocalClient = struct {
     pub fn handleEvent(self: *LocalClient, ev: events.Event) !void {
         try self.state.resolveEvent(ev);
 
-        if (self.state.mode == .withAi) {
+        // make sure no moves are made when game is over
+        if (self.state.mode == .withAi and self.state.status.isPlaying()) {
             const pos = try Ai.getMove(self.state.ai.?, &self.state);
 
             try self.state.resolveEvent(.{

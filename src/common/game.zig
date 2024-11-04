@@ -106,6 +106,13 @@ pub const ResolvedState = struct {
         // std.debug.print("deiniting resolved game state 3 \n", .{});
     }
 
+    // i cant implement this because
+    // error: expected type '*game.ResolvedState', found '*const game.ResolvedState'
+    // fixed by not using it and drilling in
+    // pub fn isGameOver(self: *ResolvedState) bool {
+    //     return !self.status.isPlaying();
+    // }
+
     pub fn resolveEvent(self: *ResolvedState, ev: events.Event) !void {
         switch (ev) {
             .startGame => return error.BadEvent,

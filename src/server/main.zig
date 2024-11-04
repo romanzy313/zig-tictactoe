@@ -26,49 +26,49 @@ fn not_found(req: zap.Request) void {
 // maybe make this websocket only?
 // or try the manual way of doing polling?
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{
-        .thread_safe = true,
-    }){};
+    // var gpa = std.heap.GeneralPurposeAllocator(.{
+    //     .thread_safe = true,
+    // }){};
 
-    defer {
-        const check = gpa.deinit();
+    // defer {
+    //     const check = gpa.deinit();
 
-        if (check == .leak) {
-            debug.print("THERE WAS A LEAK !!!1!\n", .{});
-        }
-    }
+    //     if (check == .leak) {
+    //         debug.print("THERE WAS A LEAK !!!1!\n", .{});
+    //     }
+    // }
 
-    const allocator = gpa.allocator();
+    // const allocator = gpa.allocator();
 
-    var simple_router = zap.Router.init(allocator, .{
-        .not_found = not_found,
-    });
-    defer simple_router.deinit();
+    // var simple_router = zap.Router.init(allocator, .{
+    //     .not_found = not_found,
+    // });
+    // defer simple_router.deinit();
 
-    var game_repo = GameRepo.init(allocator);
-    defer game_repo.deinit();
+    // var game_repo = GameRepo.init(allocator);
+    // defer game_repo.deinit();
 
-    var routes = Routes.init(allocator, &game_repo, "localhost:3000");
+    // var routes = Routes.init(allocator, &game_repo, "localhost:3000");
 
-    try simple_router.handle_func("/api/new-game", &routes, &Routes.newGame);
-    try simple_router.handle_func("/api/game", &routes, &Routes.getGame);
-    try simple_router.handle_func("/api/all-games", &routes, &Routes.getAllGames);
+    // try simple_router.handle_func("/api/new-game", &routes, &Routes.newGame);
+    // try simple_router.handle_func("/api/game", &routes, &Routes.getGame);
+    // try simple_router.handle_func("/api/all-games", &routes, &Routes.getAllGames);
 
-    var listener = zap.HttpListener.init(.{
-        .port = 3000,
-        .on_request = simple_router.on_request_handler(),
-        .log = true,
-        .max_clients = 100000,
-    });
-    try listener.listen();
+    // var listener = zap.HttpListener.init(.{
+    //     .port = 3000,
+    //     .on_request = simple_router.on_request_handler(),
+    //     .log = true,
+    //     .max_clients = 100000,
+    // });
+    // try listener.listen();
 
-    std.debug.print("Listening on 0.0.0.0:3000\n", .{});
+    // std.debug.print("Listening on 0.0.0.0:3000\n", .{});
 
-    // start worker threads
-    zap.start(.{
-        .threads = 1,
-        .workers = 1,
-    });
+    // // start worker threads
+    // zap.start(.{
+    //     .threads = 1,
+    //     .workers = 1,
+    // });
 }
 
 test {

@@ -3,11 +3,11 @@ const debug = std.debug;
 const Allocator = std.mem.Allocator;
 
 const game = @import("common").game;
-const ai = @import("common").ai;
+const Ai = @import("common").Ai;
 
 /// Configuration for the application
 pub const Config = struct {
-    aiDifficulty: ?ai.Difficulty,
+    aiDifficulty: ?Ai.Difficulty,
 
     pub fn debugPrint(self: Config) void {
         debug.print("AI Difficulty: {any}\n", .{self.aiDifficulty});
@@ -40,7 +40,7 @@ pub fn parseConfigFromArgs(allocator: Allocator) !Config {
             //     std.debug.print("{} {}\n", .{f.value});
             // }
             // cannot switch on strings...
-            inline for (@typeInfo(ai.Difficulty).Enum.fields) |f| {
+            inline for (@typeInfo(Ai.Difficulty).Enum.fields) |f| {
                 // std.debug.print("{d} {s}\n", .{ f.value, f.name });
                 if (std.mem.eql(u8, f.name, aiVal)) {
                     config.aiDifficulty = @enumFromInt(f.value);

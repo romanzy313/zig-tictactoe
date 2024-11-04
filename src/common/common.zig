@@ -1,7 +1,9 @@
 const std = @import("std");
-pub const ai = @import("Ai.zig");
+pub const Ai = @import("Ai.zig");
 pub const game = @import("game.zig");
+pub const client = @import("client.zig");
 pub const server = @import("server.zig");
+pub const events = @import("events.zig");
 
 test {
     std.testing.refAllDecls(@This());

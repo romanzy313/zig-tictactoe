@@ -30,9 +30,9 @@ pub fn build(b: *std.Build) void {
     // running `zig build`).
     // b.installArtifact(lib);
 
-    const exe_client = b.addExecutable(.{
-        .name = "zig-tictactoe-client",
-        .root_source_file = b.path("src/client/main.zig"),
+    const exe_cli = b.addExecutable(.{
+        .name = "zig-tictactoe-cli",
+        .root_source_file = b.path("src/cli/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -59,17 +59,10 @@ pub fn build(b: *std.Build) void {
         .commonModule = common_module,
     };
 
-    // before:
-    // exe_client.root_module.addImport("vendor", vendor_module);
-    // exe_client.root_module.addImport("common", common_module);
-    // exe_server.root_module.addImport("vendor", vendor_module);
-    // exe_server.root_module.addImport("common", common_module);
-
-    // after:
-    shared_modules.addModulesToExe(&exe_client.root_module);
+    shared_modules.addModulesToExe(&exe_cli.root_module);
     shared_modules.addModulesToExe(&exe_server.root_module);
 
-    // external dependencies
+    // external dependencies for server
     const zap = b.dependency("zap", .{
         .target = target,
         .optimize = optimize,
@@ -78,48 +71,37 @@ pub fn build(b: *std.Build) void {
 
     exe_server.root_module.addImport("zap", zap.module("zap"));
 
-    // exe_server.addObject("src/ai.zig");
-
-    // const mp_module = b.addModule(
-    //     "ai",
-    //     .{
-    //         .
-    //         //.{ .path = b.pathJoin(&.{ "src", "ai.zig" }) },
-    //     },
-    // );
-    // exe_server.root_module.addImport("ai", mp_module);
-
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
-    b.installArtifact(exe_client);
+    b.installArtifact(exe_cli);
     b.installArtifact(exe_server);
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
     // such a dependency.
-    const run_cmd_client = b.addRunArtifact(exe_client);
+    const run_cmd_cli = b.addRunArtifact(exe_cli);
     const run_cmd_server = b.addRunArtifact(exe_server);
 
     // By making the run step depend on the install step, it will be run from the
     // installation directory rather than directly from within the cache directory.
     // This is not necessary, however, if the application depends on other installed
     // files, this ensures they will be present and in the expected location.
-    run_cmd_client.step.dependOn(b.getInstallStep());
+    run_cmd_cli.step.dependOn(b.getInstallStep());
     run_cmd_server.step.dependOn(b.getInstallStep());
 
     // This allows the user to pass arguments to the application in the build
     // command itself, like this: `zig build run -- arg1 arg2 etc`
     if (b.args) |args| {
-        run_cmd_client.addArgs(args);
+        run_cmd_cli.addArgs(args);
         run_cmd_server.addArgs(args);
     }
 
     // This creates a build step. It will be visible in the `zig build --help` menu,
     // and can be selected like this: `zig build run`
     // This will evaluate the `run` step rather than the default, which is "install".
-    const run_step_client = b.step("client", "Run the app");
-    run_step_client.dependOn(&run_cmd_client.step);
+    const run_step_cli = b.step("cli", "Run the cli app");
+    run_step_cli.dependOn(&run_cmd_cli.step);
 
     const run_step_server = b.step("server", "Run the server");
     run_step_server.dependOn(&run_cmd_server.step);
@@ -131,16 +113,16 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    shared_modules.addModulesToExe(&tests_common.root_module);
+    // shared_modules.addModulesToExe(&tests_common.root_module);
     const run_tests_common = b.addRunArtifact(tests_common);
 
-    const tests_client = b.addTest(.{
-        .root_source_file = b.path("src/client/main.zig"),
+    const tests_cli = b.addTest(.{
+        .root_source_file = b.path("src/cli/main.zig"),
         .target = target,
         .optimize = optimize,
     });
-    shared_modules.addModulesToExe(&tests_client.root_module);
-    const run_tests_client = b.addRunArtifact(tests_client);
+    shared_modules.addModulesToExe(&tests_cli.root_module);
+    const run_tests_client = b.addRunArtifact(tests_cli);
 
     const tests_server = b.addTest(.{
         .root_source_file = b.path("src/server/main.zig"),
@@ -153,39 +135,10 @@ pub fn build(b: *std.Build) void {
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request
     // running the unit tests.
-    const test_step = b.step("test", "Run unit tests");
+    const test_step = b.step("test", "Run all unit tests");
     test_step.dependOn(&run_tests_common.step);
     test_step.dependOn(&run_tests_client.step);
     test_step.dependOn(&run_tests_server.step);
-
-    // OLD
-    // there is a separate lib and "executable tests..."
-
-    // Creates a step for unit testing. This only builds the test executable
-    // but does not run it.
-    // Unit tests are the same for client and server!
-    // const lib_unit_tests = b.addTest(.{
-    //     .root_source_file = b.path("src/root.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-
-    // const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
-
-    // const exe_unit_tests_client = b.addTest(.{
-    //     .root_source_file = b.path("src/client/main.zig"), // FIXME: what should be done here?
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-
-    // const run_exe_unit_tests_client = b.addRunArtifact(exe_unit_tests_client);
-
-    // Similar to creating the run step earlier, this exposes a `test` step to
-    // the `zig build --help` menu, providing a way for the user to request
-    // running the unit tests.
-    // const test_step = b.step("test", "Run unit tests");
-    // test_step.dependOn(&run_lib_unit_tests.step);
-    // test_step.dependOn(&run_exe_unit_tests_client.step);
 }
 
 const SharedModules = struct {
