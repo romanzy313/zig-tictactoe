@@ -14,6 +14,8 @@ pub const GameHandler = struct {
     clientInstance: client.Client = undefined,
     nav: input.Navigation,
 
+    playing: bool = true,
+
     pub fn init(reader: std.io.AnyReader, writer: std.io.AnyWriter, board_size: usize) GameHandler {
         return .{
             .reader = reader,
@@ -37,8 +39,7 @@ pub const GameHandler = struct {
 
         if (game_over) {
             self.writer.print("Game over. Status: {any}\n", .{self.clientInstance.state().status}) catch unreachable;
-            std.process.exit(0); // TODO: fix hacky hack...
-            // ohh this messes up the console as RawInput defer .deinit() never runs!
+            self.playing = false;
         }
 
         // i need to detect when the game is over
@@ -46,8 +47,9 @@ pub const GameHandler = struct {
 
     // run can be moved out... but then its not pretty...
     pub fn run(self: *GameHandler) !void {
-        // TODO: fix hacky hack, this will never stop, unless quit is performed
-        while (true) {
+        // TODO: fix hacky hack, this will never stop, if the response from the server is async
+        // which is the case when remote server is used
+        while (self.playing) {
             const cmd = try input.readCommand(self.reader);
 
             std.debug.print("got command {any}\n", .{cmd});
