@@ -10,12 +10,20 @@ pub fn render(writer: std.io.AnyWriter, state: game.ResolvedState, selection: ga
 
     for (state.grid, 0..) |row, i| {
         for (row, 0..) |cell, j| {
-            const ansiPrefix = if (selection.y == i and selection.x == j) ansi_selected else ansi_normal;
-            switch (cell) {
-                .Empty => try writer.print("{s}-{s}", .{ ansiPrefix, ansi_normal }),
-                .X => try writer.print("{s}x{s}", .{ ansiPrefix, ansi_normal }),
-                .O => try writer.print("{s}o{s}", .{ ansiPrefix, ansi_normal }),
+            const value: *const [1]u8 = switch (cell) {
+                .Empty => "-",
+                .X => "x",
+                .O => "o",
+            };
+
+            const is_selected = selection.y == i and selection.x == j;
+
+            if (is_selected) {
+                try writer.print("{s}{s}{s}", .{ ansi_selected, value, ansi_normal });
+            } else {
+                try writer.print("{s}", .{value});
             }
+
             try writer.writeAll(" ");
         }
         try writer.writeAll("\n");
