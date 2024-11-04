@@ -1,20 +1,20 @@
 const std = @import("std");
 const game = @import("common").game;
 
-const ANSI_NORMAL: []const u8 = "\u{001b}[0m";
-const ANSI_SELECTED: []const u8 = "\u{001b}[7m";
-const CLEAR_TERM: []const u8 = "\x1b[2J\x1b[H";
+const ansi_normal: []const u8 = "\u{001b}[0m";
+const ansi_selected: []const u8 = "\u{001b}[7m";
+const clear_term: []const u8 = "\x1b[2J\x1b[H";
 
 pub fn render(writer: std.io.AnyWriter, state: game.ResolvedState, selection: game.CellPosition, err: ?anyerror) !void {
-    try writer.writeAll(CLEAR_TERM);
+    try writer.writeAll(clear_term);
 
     for (state.grid, 0..) |row, i| {
         for (row, 0..) |cell, j| {
-            const ansiPrefix = if (selection.y == i and selection.x == j) ANSI_SELECTED else ANSI_NORMAL;
+            const ansiPrefix = if (selection.y == i and selection.x == j) ansi_selected else ansi_normal;
             switch (cell) {
-                .Empty => try writer.print("{s}-{s}", .{ ansiPrefix, ANSI_NORMAL }),
-                .X => try writer.print("{s}x{s}", .{ ansiPrefix, ANSI_NORMAL }),
-                .O => try writer.print("{s}o{s}", .{ ansiPrefix, ANSI_NORMAL }),
+                .Empty => try writer.print("{s}-{s}", .{ ansiPrefix, ansi_normal }),
+                .X => try writer.print("{s}x{s}", .{ ansiPrefix, ansi_normal }),
+                .O => try writer.print("{s}o{s}", .{ ansiPrefix, ansi_normal }),
             }
             try writer.writeAll(" ");
         }
@@ -36,5 +36,8 @@ pub fn render(writer: std.io.AnyWriter, state: game.ResolvedState, selection: ga
         try writer.print("error: {any}\n", .{err});
     }
 }
+
+// would be nice to include winning game render (like highlight the winning condition)
+// i think its pretty important
 
 // TODO: test render()
