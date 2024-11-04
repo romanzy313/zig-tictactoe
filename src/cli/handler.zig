@@ -60,7 +60,12 @@ pub const GameHandler = struct {
                     // errors are not handled, application will crash
                     const ev = events.Event{ .makeMove = .{ .position = self.nav.pos } };
 
-                    try self.clientInstance.handleEvent(ev);
+                    self.clientInstance.handleEvent(ev) catch |err| {
+                        // the handle event must return an error!
+                        // TODO: game must be rerendered with the error
+                        // for now just print it oit
+                        try self.writer.print("ERROR: {any}\n", .{err});
+                    };
                 },
                 else => |nav_cmd| {
                     switch (nav_cmd) {
