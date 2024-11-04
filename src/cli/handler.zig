@@ -34,6 +34,7 @@ pub const GameHandler = struct {
             // render with error?
             // this technically can never fail, if we cant render into stdout - its fatal error
             std.debug.print("FAILED TO RENDER {any}\n", .{err});
+            self.playing = false;
         };
         const game_over = !state.status.isPlaying();
 
@@ -41,8 +42,6 @@ pub const GameHandler = struct {
             self.writer.print("Game over. Status: {any}\n", .{self.clientInstance.state().status}) catch unreachable;
             self.playing = false;
         }
-
-        // i need to detect when the game is over
     }
 
     // run can be moved out... but then its not pretty...

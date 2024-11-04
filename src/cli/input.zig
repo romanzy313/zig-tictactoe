@@ -63,7 +63,12 @@ pub fn readCommand(reader: std.io.AnyReader) !CliCommand {
 }
 
 pub const Navigation = struct {
-    pub const Direction = enum { Left, Down, Up, Right };
+    pub const Direction = enum {
+        Left,
+        Down,
+        Up,
+        Right,
+    };
 
     gridSize: usize,
     pos: game.CellPosition,
