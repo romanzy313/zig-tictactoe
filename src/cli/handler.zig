@@ -51,8 +51,6 @@ pub const GameHandler = struct {
         while (self.playing) {
             const cmd = try input.readCommand(self.reader);
 
-            std.debug.print("got command {any}\n", .{cmd});
-
             switch (cmd) {
                 .Quit => {
                     try self.writer.print("Quitting...\n", .{});
