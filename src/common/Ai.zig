@@ -12,7 +12,7 @@ pub fn getMove(difficulty: Difficulty, board: Board) !Board.CellPosition {
     return switch (difficulty) {
         .easy => easyMove(board),
         // else => error.AiDifficultyNotImplmeneted,
-        else => @panic("not implmeneted"),
+        else => return error.AiDifficultyNotimplemented,
     };
 }
 
