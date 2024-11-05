@@ -14,7 +14,14 @@
 //     std.sort.block(T, items, context, lessThanFn);
 // }
 
-// initialize array of fixed size at comptime
+// initialize 1d array of fixed size at comptime
 // comptime var routes = [_]RoutePart{.{
 //     .empty = {},
 // }} ** maxDepth;
+
+// make 2d array of fixed size at comptime
+// const mat3x2 = [_][2]u32{
+//     [_]u32{ 1, 2 },
+//     [_]u32{ 3, 4 },
+//     [_]u32{ 5, 6 },
+// };

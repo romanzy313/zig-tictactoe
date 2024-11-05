@@ -1,14 +1,15 @@
 const std = @import("std");
 const game = @import("common").game;
+const Board = @import("common").Board;
 
 const ansi_normal: []const u8 = "\u{001b}[0m";
 const ansi_selected: []const u8 = "\u{001b}[7m";
 const clear_term: []const u8 = "\x1b[2J\x1b[H";
 
-pub fn render(writer: std.io.AnyWriter, state: game.ResolvedState, selection: game.CellPosition, err: ?anyerror) !void {
+pub fn render(writer: std.io.AnyWriter, state: game.ResolvedState, selection: Board.CellPosition, err: ?anyerror) !void {
     try writer.writeAll(clear_term);
 
-    for (state.grid, 0..) |row, i| {
+    for (state.board.grid, 0..) |row, i| {
         for (row, 0..) |cell, j| {
             const value: *const [1]u8 = switch (cell) {
                 .Empty => "-",

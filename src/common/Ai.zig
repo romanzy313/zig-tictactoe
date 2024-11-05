@@ -1,5 +1,6 @@
 const std = @import("std");
 const game = @import("game.zig");
+const Board = @import("Board.zig");
 
 pub const Difficulty = enum {
     easy,
@@ -7,7 +8,7 @@ pub const Difficulty = enum {
     hard,
 };
 
-pub fn getMove(difficulty: Difficulty, state: *game.ResolvedState) !game.CellPosition {
+pub fn getMove(difficulty: Difficulty, state: *game.ResolvedState) !Board.CellPosition {
     return switch (difficulty) {
         .easy => easyMove(state),
         // else => error.AiDifficultyNotImplmeneted,
@@ -15,8 +16,9 @@ pub fn getMove(difficulty: Difficulty, state: *game.ResolvedState) !game.CellPos
     };
 }
 
-fn easyMove(state: *game.ResolvedState) !game.CellPosition {
-    for (state.grid, 0..) |col, y| {
+fn easyMove(state: *game.ResolvedState) !Board.CellPosition {
+    // TODO: try an iterator?
+    for (state.board.grid, 0..) |col, y| {
         for (col, 0..) |cell, x| {
             if (cell == .Empty) {
                 return .{ .x = x, .y = y };

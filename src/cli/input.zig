@@ -4,6 +4,7 @@ const linux = std.os.linux;
 const control_code = std.ascii.control_code;
 const testing = std.testing;
 const game = @import("common").game;
+const Board = @import("common").Board;
 
 pub const CliCommand = enum {
     // None,
@@ -71,10 +72,10 @@ pub const Navigation = struct {
     };
 
     gridSize: usize,
-    pos: game.CellPosition,
+    pos: Board.CellPosition,
 
     // TODO: infer initial position
-    pub fn init(gridSize: usize, pos: game.CellPosition) Navigation {
+    pub fn init(gridSize: usize, pos: Board.CellPosition) Navigation {
         return .{
             .gridSize = gridSize,
             .pos = pos,
@@ -109,7 +110,7 @@ test Navigation {
 
     nav.onDir(.Up);
     // WARNING: this provides really bad feedback on error.
-    try testing.expectEqual(game.CellPosition{ .x = 1, .y = 0 }, nav.pos);
+    try testing.expectEqual(Board.CellPosition{ .x = 1, .y = 0 }, nav.pos);
 }
 
 // source https://blog.fabrb.com/2024/capturing-input-in-real-time-zig-0-14/

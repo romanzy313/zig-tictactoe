@@ -1,5 +1,6 @@
 const std = @import("std");
 const game = @import("game.zig");
+const Board = @import("Board.zig");
 const Ai = @import("Ai.zig");
 
 pub const Event = union(enum) {
@@ -37,5 +38,5 @@ pub const StartGameEvent = union(game.GameMode) {
 };
 
 pub const MakeMoveEvent = struct {
-    position: game.CellPosition,
+    position: Board.CellPosition,
 };

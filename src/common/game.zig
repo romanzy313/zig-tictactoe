@@ -2,20 +2,14 @@ const std = @import("std");
 const vendor = @import("vendor");
 const uuid = vendor.uuid;
 const Allocator = std.mem.Allocator;
-const Ai = @import("Ai.zig");
 const assert = std.debug.assert;
 const testing_allocator = std.testing.allocator;
 const testing = std.testing;
 const ArrayList = std.ArrayList;
+
+const Board = @import("Board.zig");
+const Ai = @import("Ai.zig");
 const events = @import("events.zig");
-
-/// specifies position of the cell
-/// where coordinate 0,0 is at the top-left corner
-/// x increments to the right
-/// y increments down
-pub const CellPosition = struct { x: usize, y: usize };
-
-pub const CellValue = enum { Empty, X, O };
 
 pub const Status = enum {
     Stalemate,
@@ -37,13 +31,13 @@ pub const GameMode = enum {
 };
 
 pub const ResolvedState = struct {
-    grid: [][]CellValue,
+    seqId: usize = 0, // for ordering of the events
+
+    board: Board,
     status: Status,
 
     mode: GameMode,
     ai: ?Ai.Difficulty,
-
-    seqId: usize = 0,
 
     pub fn init(allocator: Allocator, startGameEvent: events.StartGameEvent) !ResolvedState {
         const boardSize = startGameEvent.boardSize();
@@ -53,13 +47,7 @@ pub const ResolvedState = struct {
             return error.BoardSizeNotSupported;
         }
 
-        const grid = try allocator.alloc([]CellValue, boardSize);
-        for (grid) |*row| {
-            row.* = try allocator.alloc(CellValue, boardSize);
-            for (row.*) |*cell| {
-                cell.* = .Empty;
-            }
-        }
+        const board = try Board.initEmpty(allocator, startGameEvent.boardSize());
 
         var ai: ?Ai.Difficulty = null;
 
@@ -68,7 +56,7 @@ pub const ResolvedState = struct {
         }
 
         return .{
-            .grid = grid,
+            .board = board,
             .status = .TurnX,
             .mode = startGameEvent.gameMode(),
             .ai = ai,
@@ -96,19 +84,12 @@ pub const ResolvedState = struct {
     }
 
     pub fn deinit(self: *ResolvedState, allocator: Allocator) void {
-        // std.debug.print("deiniting resolved game state 1 {any} \n", .{self.grid});
-        for (self.grid) |row| {
-            allocator.free(row);
-        }
-        // std.debug.print("deiniting resolved game state 2 \n", .{});
-
-        allocator.free(self.grid);
-        // std.debug.print("deiniting resolved game state 3 \n", .{});
+        self.board.deinit(allocator);
     }
 
-    // i cant implement this because
+    // TODO: why cant I implement this?
     // error: expected type '*game.ResolvedState', found '*const game.ResolvedState'
-    // fixed by not using it and drilling in
+    // fixed by not using it and doing a nested call
     // pub fn isGameOver(self: *ResolvedState) bool {
     //     return !self.status.isPlaying();
     // }
@@ -125,8 +106,8 @@ pub const ResolvedState = struct {
         self.seqId += 1;
     }
 
-    fn handleMakeMoveEvent(self: *ResolvedState, pos: CellPosition) !Status {
-        const size = self.grid.len;
+    fn handleMakeMoveEvent(self: *ResolvedState, pos: Board.CellPosition) !Status {
+        const size = self.board.size;
         if (self.status != .TurnX and self.status != .TurnO) {
             return error.GameFinished;
         }
@@ -135,120 +116,39 @@ pub const ResolvedState = struct {
             return error.InvalidPosition;
         }
 
-        const selected = self.grid[pos.y][pos.x];
+        const selected = self.board.getValue(pos);
         if (selected != .Empty) {
             return error.CannotSelectAlreadySelected;
         }
 
         // mutate the grid
         switch (self.status) {
-            .TurnX => self.grid[pos.y][pos.x] = .X,
-            .TurnO => self.grid[pos.y][pos.x] = .O,
+            .TurnX => self.board.setValue(pos, .X),
+            .TurnO => self.board.setValue(pos, .O),
             else => unreachable,
         }
 
-        //check verticals
-        for (self.grid) |col| {
-            var count: i8 = 0;
+        // check win condition
 
-            for (col) |cell| {
-                switch (cell) {
-                    .Empty => {
-                        count = 0;
-                        continue;
-                    },
-                    .X => count += 1,
-                    .O => count -= 1,
-                }
-            }
+        const maybe_win_condition = self.board.getWinCondition();
 
-            if (count == @as(i8, @intCast(size))) return .WinX;
-            if (count == -@as(i8, @intCast(size))) return .WinO;
-        }
-
-        //check horizontals
-        for (0..size) |col| {
-            var count: i8 = 0;
-            for (0..size) |row| {
-                const cell = self.grid[row][col];
-                switch (cell) {
-                    .Empty => {
-                        count = 0;
-                        continue;
-                    },
-                    .X => count += 1,
-                    .O => count -= 1,
-                }
-            }
-            // not allowed!
-            if (count == @as(i8, @intCast(size))) return .WinX;
-            if (count == -@as(i8, @intCast(size))) return .WinO;
-        }
-
-        // check diagonals
-        // TODO: hardcoded to 3x3
-        if (self.grid[1][1] == .X or self.grid[1][1] == .O) {
-            if ((self.grid[0][0] == self.grid[1][1] and self.grid[1][1] == self.grid[2][2]) or
-                (self.grid[0][2] == self.grid[1][1] and self.grid[1][1] == self.grid[2][0]))
-            {
-                switch (self.grid[1][1]) {
-                    .X => return .WinX,
-                    .O => return .WinO,
-                    else => unreachable,
-                }
+        if (maybe_win_condition) |win| {
+            switch (win.side) {
+                .X => return .WinX,
+                .O => return .WinO,
             }
         }
 
         // check if there are available moves
-        for (self.grid) |row| {
-            for (row) |cell| {
-                if (cell == .Empty) {
-                    switch (self.status) {
-                        .TurnX => return .TurnO,
-                        .TurnO => return .TurnX,
-                        else => unreachable,
-                    }
-                }
+        if (self.board.hasMovesAvailable()) {
+            switch (self.status) {
+                .TurnX => return .TurnO,
+                .TurnO => return .TurnX,
+                else => unreachable,
             }
         }
 
         return .Stalemate;
-    }
-
-    pub fn debugPrint(self: *ResolvedState) void {
-        const print = std.debug.print;
-        const size = self.grid.len;
-
-        for (self.grid, 0..) |col, i| {
-            for (col, 0..) |cell, j| {
-                switch (cell) {
-                    .Empty => print("-", .{}),
-                    .X => print("x", .{}),
-                    .O => print("o", .{}),
-                }
-                if (j < size - 1)
-                    print(" ", .{});
-            }
-            if (i < size - 1)
-                print("\n", .{});
-        }
-    }
-
-    pub fn debugPrintWriter(self: *ResolvedState, writer: std.io.AnyWriter) !void {
-        const size = self.grid.len;
-        for (self.grid, 0..) |row, i| {
-            for (row, 0..) |cell, j| {
-                switch (cell) {
-                    .Empty => try writer.writeAll("-"),
-                    .X => try writer.writeAll("x"),
-                    .O => try writer.writeAll("o"),
-                }
-                if (j < size - 1)
-                    try writer.writeAll(" ");
-            }
-            if (i < size - 1)
-                try writer.writeAll("\n");
-        }
     }
 };
 
@@ -285,6 +185,17 @@ pub const GamePlayers = struct {
     o: AnyPlayer,
 };
 
+// pub fn makeTestGrid(allocator: Allocator) [][]CellValue {
+//     const grid = try allocator.alloc([]CellValue, boardSize);
+//     for (grid) |*row| {
+//         row.* = try allocator.alloc(CellValue, boardSize);
+//         for (row.*) |*cell| {
+//             cell.* = .Empty;
+//         }
+//     }
+//     //
+// }
+
 test "grid init" {
     var state = try ResolvedState.init(testing_allocator, .{ .multiplayer = .{
         .boardSize = 3,
@@ -295,15 +206,15 @@ test "grid init" {
     try testing.expectEqual(0, state.seqId);
 
     // good example of how to mock a writer
-    var list = ArrayList(u8).init(testing_allocator);
-    defer list.deinit();
+    // var list = ArrayList(u8).init(testing_allocator);
+    // defer list.deinit();
 
-    try state.debugPrintWriter(list.writer().any());
-    try testing.expectEqualSlices(u8,
-        \\- - -
-        \\- - -
-        \\- - -
-    , list.items);
+    // try state.debugPrintWriter(list.writer().any());
+    // try testing.expectEqualSlices(u8,
+    //     \\- - -
+    //     \\- - -
+    //     \\- - -
+    // , list.items);
 }
 
 test "make move" {
@@ -322,16 +233,17 @@ test "make move" {
     try testing.expectEqual(2, state.seqId);
     try testing.expectEqual(.TurnX, state.status);
 
-    var list = ArrayList(u8).init(testing_allocator);
-    defer list.deinit();
+    // removed
+    // var list = ArrayList(u8).init(testing_allocator);
+    // defer list.deinit();
 
-    try state.debugPrintWriter(list.writer().any());
+    // try state.debugPrintWriter(list.writer().any());
 
-    try testing.expectEqualSlices(u8,
-        \\o - -
-        \\- - x
-        \\- - -
-    , list.items);
+    // try testing.expectEqualSlices(u8,
+    //     \\o - -
+    //     \\- - x
+    //     \\- - -
+    // , list.items);
 }
 
 test "make move errors" {
@@ -351,72 +263,3 @@ test "make move errors" {
 
     try std.testing.expectError(error.GameFinished, state.resolveEvent(.{ .makeMove = .{ .position = .{ .x = 1, .y = 1 } } }));
 }
-
-// test "win condition horizontal" {
-//     var gameEvents = ArrayList(events.Event).init(testing_allocator);
-//     defer gameEvents.deinit();
-
-//     gameEvents.insertSlice(0, [_]events.Event{});
-
-//     var state = try ResolvedState.initAndResolveAll(testing_allocator, gameEvents);
-//     defer state.deinit(testing_allocator);
-
-//     state.grid[0][0] = .X;
-//     state.grid[0][1] = .X;
-
-//     const status = try state.makeMove(.{ .x = 2, .y = 0 });
-
-//     try testing.expectEqual(.WinX, status);
-// }
-
-test "win condition horizontal" {
-    var state = try ResolvedState.init(testing_allocator, .{ .multiplayer = .{
-        .boardSize = 3,
-        .playerSide = .X,
-    } });
-    defer state.deinit(testing_allocator);
-
-    state.grid[0][0] = .X;
-    state.grid[0][1] = .X;
-    try state.resolveEvent(.{ .makeMove = .{ .position = .{ .x = 2, .y = 0 } } });
-
-    try testing.expectEqual(.WinX, state.status);
-}
-
-test "win condition vertical" {
-    var state = try ResolvedState.init(testing_allocator, .{ .multiplayer = .{
-        .boardSize = 3,
-        .playerSide = .X,
-    } });
-    defer state.deinit(testing_allocator);
-
-    state.grid[0][0] = .X;
-    state.grid[1][0] = .X;
-    try state.resolveEvent(.{ .makeMove = .{ .position = .{ .x = 0, .y = 2 } } });
-
-    try testing.expectEqual(.WinX, state.status);
-}
-
-// test "win condition diagonal 1" {
-//     var state = try State.init(testing_allocator, 3);
-//     defer state.deinit(testing_allocator);
-
-//     state.grid[0][0] = .X;
-//     state.grid[1][1] = .X;
-
-//     const status = try state.makeMove(.{ .x = 2, .y = 2 });
-
-//     try testing.expectEqual(.WinX, status);
-// }
-
-// test "win condition diagonal 2" {
-//     var state = try State.init(testing_allocator, 3);
-//     defer state.deinit(testing_allocator);
-
-//     state.grid[0][2] = .X;
-//     state.grid[1][1] = .X;
-
-//     const status = try state.makeMove(.{ .x = 0, .y = 2 });
-
-//     try testing.expectEqual(.WinX, status);
-// }
