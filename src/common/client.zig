@@ -85,7 +85,7 @@ pub const LocalClient = struct {
             .withAi => |ev| {
                 // ai makes the first move if needed
                 if (ev.playerSide == .O) {
-                    const pos = try Ai.getMove(ev.aiDifficulty, &state);
+                    const pos = try Ai.getMove(ev.aiDifficulty, state.board);
 
                     try state.resolveEvent(.{
                         .makeMove = .{
@@ -133,7 +133,7 @@ pub const LocalClient = struct {
 
         // make sure no moves are made when game is over
         if (self.state.mode == .withAi and self.state.status.isPlaying()) {
-            const pos = try Ai.getMove(self.state.ai.?, &self.state);
+            const pos = try Ai.getMove(self.state.ai.?, self.state.board);
 
             try self.state.resolveEvent(.{
                 .makeMove = .{

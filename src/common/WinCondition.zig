@@ -98,7 +98,6 @@ fn checkAnySize(grid: [][]Board.CellValue, size: usize) ?WinCondition {
                 .startsAt = .{ .x = x, .y = y + 1 - win_count_usize },
             };
         }
-        // not allowed!
     }
 
     // TODO: add win_count here too
