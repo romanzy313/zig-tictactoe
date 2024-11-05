@@ -87,9 +87,9 @@ pub const ResolvedState = struct {
         self.board.deinit(allocator);
     }
 
-    // TODO: why cant I implement this?
+    // TODO: why cant I implement this without self: *const ResolvedState?
     // error: expected type '*game.ResolvedState', found '*const game.ResolvedState'
-    // fixed by not using it and doing a nested call
+    // fixed by not using it and doing a nested call instead
     // pub fn isGameOver(self: *ResolvedState) bool {
     //     return !self.status.isPlaying();
     // }

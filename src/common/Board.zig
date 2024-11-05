@@ -55,7 +55,9 @@ pub fn deinit(self: *Board, allocator: Allocator) void {
 
 /// make sure that in runtime the position was checked to be within the board size
 /// or should I check this here?
-pub fn getValue(self: *Board, pos: CellPosition) CellValue {
+///
+/// Also, why is const okay? since I am not mutating it?
+pub fn getValue(self: *const Board, pos: CellPosition) CellValue {
     assert(pos.x < self.size);
     assert(pos.y < self.size);
 
@@ -63,6 +65,9 @@ pub fn getValue(self: *Board, pos: CellPosition) CellValue {
 }
 
 /// make sure that in runtime the position was checked to be within the board size
+///
+/// What why does `self: *const Board` still makes this work? I dont follow
+/// This is mutation, i better protect it by making it "non-const?"
 pub fn setValue(self: *Board, pos: CellPosition, value: CellValue) void {
     // debug assers
     assert(pos.x < self.size);
@@ -90,8 +95,6 @@ pub fn getWinCondition(self: *Board) ?WinCondition {
 /// serializes the value as string. The caller is responsible for clearing it!
 /// this should not be used, as writer should be used instead (and is used for json)
 pub fn serialize(self: *Board, allocator: Allocator) ![]const u8 {
-    // do serialization
-    // const b_array = try BoundedArray(u8, self.size).init(0);
     var list = try ArrayList(u8).initCapacity(allocator, self.size * self.size);
 
     for (self.grid) |row| {

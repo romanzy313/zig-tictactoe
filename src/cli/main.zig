@@ -52,5 +52,8 @@ pub fn main() !void {
 // tests to evaluate are defined here.
 // hardcoded, as std.testing.refAllDeclsRecursive(@This()); will try to test "@import("common").ai.Ai"
 test {
+    _ = @import("config.zig");
+    _ = @import("handler.zig");
     _ = @import("input.zig");
+    _ = @import("renderer.zig");
 }
