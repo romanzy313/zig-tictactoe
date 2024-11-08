@@ -232,12 +232,6 @@ pub fn makeTestBoardStatic(comptime size: usize, staticVal: [size][size]CellValu
 }
 
 fn isSizeValid(size: usize) bool {
-    // temporary
-    if (size != 3) {
-        std.debug.print("board sizes of not 3 are not supported! \n", .{});
-        return false;
-    }
-
     return size >= 3 and size <= max_board_size;
 }
 

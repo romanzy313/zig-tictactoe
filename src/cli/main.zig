@@ -20,7 +20,7 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     // Parse arguments here
-    const board_size = 3;
+    const board_size = 5;
 
     const cfg = try config.parseConfigFromArgs(allocator);
     cfg.debugPrint(); // will be cleared when game is ran!
@@ -35,7 +35,8 @@ pub fn main() !void {
         .local = try client.LocalClient.init(
             allocator,
             .{
-                .withAi = .{ .aiDifficulty = .easy, .boardSize = board_size, .playerSide = .X },
+                //.withAi = .{ .aiDifficulty = .easy, .boardSize = board_size, .playerSide = .X },
+                .multiplayer = .{ .boardSize = board_size, .playerSide = .X },
             },
             &game_handler,
         ),

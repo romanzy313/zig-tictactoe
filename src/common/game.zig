@@ -40,13 +40,6 @@ pub const ResolvedState = struct {
     ai: ?Ai.Difficulty,
 
     pub fn init(allocator: Allocator, startGameEvent: events.StartGameEvent) !ResolvedState {
-        const boardSize = startGameEvent.boardSize();
-
-        // startGameEvent.
-        if (boardSize != 3) {
-            return error.BoardSizeNotSupported;
-        }
-
         const board = try Board.initEmpty(allocator, startGameEvent.boardSize());
 
         var ai: ?Ai.Difficulty = null;
