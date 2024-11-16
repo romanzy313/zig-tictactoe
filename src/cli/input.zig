@@ -75,10 +75,14 @@ pub const Navigation = struct {
     pos: Board.CellPosition,
 
     // TODO: infer initial position
-    pub fn init(gridSize: usize, pos: Board.CellPosition) Navigation {
+    pub fn init(gridSize: usize) Navigation {
+        const half = @divFloor(gridSize, 2);
         return .{
             .gridSize = gridSize,
-            .pos = pos,
+            .pos = .{
+                .x = half,
+                .y = half,
+            },
         };
     }
 
@@ -99,10 +103,17 @@ pub const Navigation = struct {
             },
         }
     }
+
+    pub fn setPos(self: *Navigation, pos: Board.CellPosition) void {
+        self.pos.x = pos.x;
+        self.pos.y = pos.y;
+    }
 };
 
 test Navigation {
-    var nav = Navigation.init(3, .{ .x = 1, .y = 1 });
+    var nav = Navigation.init(3);
+
+    try testing.expectEqual(1, nav.pos.x);
 
     nav.onDir(.Up);
     try testing.expectEqual(1, nav.pos.x);
@@ -114,11 +125,13 @@ test Navigation {
 }
 
 // source https://blog.fabrb.com/2024/capturing-input-in-real-time-zig-0-14/
+// mouse trap https://stackoverflow.com/questions/5966903/how-to-get-mousemove-and-mouseclick-in-bash
 pub const RawMode = struct {
     tty_fd: fs.File.Handle = undefined,
     old_settings: linux.termios = undefined,
+    mouse_trap: bool,
 
-    pub fn init() !RawMode {
+    pub fn init(mouse_trap: bool) !RawMode {
         const tty_file = try fs.openFileAbsolute("/dev/tty", .{});
         const tty_fd = tty_file.handle;
 
@@ -131,9 +144,14 @@ pub const RawMode = struct {
 
         _ = linux.tcsetattr(tty_fd, linux.TCSA.NOW, &new_settings);
 
+        if (mouse_trap) {
+            // send output to stdout?
+        }
+
         return .{
             .tty_fd = tty_fd,
             .old_settings = old_settings,
+            .mouse_trap = mouse_trap,
         };
     }
 

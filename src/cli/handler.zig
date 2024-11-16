@@ -20,7 +20,7 @@ pub const GameHandler = struct {
         return .{
             .reader = reader,
             .writer = writer,
-            .nav = input.Navigation.init(board_size, .{ .x = 1, .y = 1 }),
+            .nav = input.Navigation.init(board_size), 
         };
     }
 

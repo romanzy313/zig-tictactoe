@@ -12,7 +12,7 @@ const input = @import("input.zig");
 
 // this is main for cli only!
 pub fn main() !void {
-    const raw = try input.RawMode.init();
+    const raw = try input.RawMode.init(false);
     defer raw.deinit();
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
