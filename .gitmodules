@@ -1,0 +1,4 @@
+[submodule "vendor/websocket"]
+	path = vendor/websocket
+	url = https://github.com/karlseguin/websocket.zig
+	branch = zig-0.13
