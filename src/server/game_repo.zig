@@ -4,7 +4,6 @@
 // const common = @import("common");
 // const game = common.game;
 // const ResolvedState = common.game.ResolvedState;
-// const uuid = @import("vendor").uuid;
 
 // const Mutex = std.Thread.Mutex;
 

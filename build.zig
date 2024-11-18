@@ -44,20 +44,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const vendor_module = b.createModule(.{ .root_source_file = b.path("vendor/vendor.zig") });
-
-    // common depends on vendor...
-    // this is quite the pain...
-    const common_module = b.createModule(.{
-        .root_source_file = b.path("src/common/common.zig"),
-    });
-    common_module.addImport("vendor", vendor_module);
-
-    const shared_modules = SharedModules{
-        .b = b,
-        .vendorModule = vendor_module,
-        .commonModule = common_module,
-    };
+    const shared_modules = SharedModules.init(b);
 
     shared_modules.addModulesToExe(&exe_cli.root_module);
     shared_modules.addModulesToExe(&exe_server.root_module);
@@ -143,11 +130,33 @@ pub fn build(b: *std.Build) void {
 
 const SharedModules = struct {
     b: *std.Build,
-    vendorModule: *std.Build.Module,
     commonModule: *std.Build.Module,
+    uuidModule: *std.Build.Module,
+    websocketModule: *std.Build.Module,
+
+    pub fn init(b: *std.Build) SharedModules {
+        const uuid_module = b.createModule(.{ .root_source_file = b.path("vendor/uuid/uuid.zig") });
+        const websocket_module = b.createModule(.{ .root_source_file = b.path("vendor/websocket/src/websocket.zig") });
+
+        // common depends on vendor...
+        // this is quite the pain...
+        const common_module = b.createModule(.{
+            .root_source_file = b.path("src/common/common.zig"),
+        });
+        common_module.addImport("uuid", uuid_module);
+        common_module.addImport("websocket", websocket_module);
+
+        return .{
+            .b = b,
+            .commonModule = common_module,
+            .uuidModule = uuid_module,
+            .websocketModule = websocket_module,
+        };
+    }
 
     fn addModulesToExe(self: SharedModules, module: *std.Build.Module) void {
-        module.addImport("vendor", self.vendorModule);
+        module.addImport("uuid", self.uuidModule);
+        module.addImport("websocket", self.websocketModule);
         module.addImport("common", self.commonModule);
     }
 };

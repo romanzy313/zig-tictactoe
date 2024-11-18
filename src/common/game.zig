@@ -1,6 +1,5 @@
 const std = @import("std");
-const vendor = @import("vendor");
-const uuid = vendor.uuid;
+const uuid = @import("uuid");
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 const testing_allocator = std.testing.allocator;
