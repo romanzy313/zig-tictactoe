@@ -68,12 +68,31 @@ pub const Client = union(enum) {
 // hmmm, how to do onStateChange?
 // pub OnStateChange1 = *const fn (*anyopaque, game.ResolvedState) void;
 
+const VTable = struct {
+    onStateChange: *const fn (ctx: *anyopaque, state: game.ResolvedState) void,
+};
+
+fn createVTable(obj: anytype) *const VTable {
+    const Ptr = @TypeOf(obj);
+
+    const vtable = struct {
+        fn onStateChange(ptr: *anyopaque, _state: game.ResolvedState) void {
+            const self: Ptr = @ptrCast(@alignCast(ptr));
+            self.onStateChange(_state);
+        }
+    };
+
+    return &.{
+        .onStateChange = vtable.onStateChange,
+    };
+}
+
 pub const LocalClient = struct {
     allocator: Allocator,
     state: game.ResolvedState, // why cant this be a pointer?
 
     handlerPtr: *anyopaque,
-    onStateChange: *const fn (ctx: *anyopaque, state: game.ResolvedState) void,
+    vtable: *const VTable,
 
     /// obj must implement the following function:
     /// fn onStateChange(self: *@This(), state: game.ResolvedState) void {}
@@ -101,23 +120,23 @@ pub const LocalClient = struct {
                 }
             },
         }
-        // create callback binding
-        const Ptr = @TypeOf(obj);
-        const onStateChange = struct {
-            fn cb(ptr: *anyopaque, _state: game.ResolvedState) void {
-                const self: Ptr = @ptrCast(@alignCast(ptr));
-                self.onStateChange(_state);
-            }
-        }.cb;
-
+        // create callback binding manually
+        // const Ptr = @TypeOf(obj);
+        // const onStateChange = struct {
+        //     fn cb(ptr: *anyopaque, _state: game.ResolvedState) void {
+        //         const self: Ptr = @ptrCast(@alignCast(ptr));
+        //         self.onStateChange(_state);
+        //     }
+        // }.cb;
+        const vtable = createVTable(obj);
         // always emit state change at the start of the game
-        onStateChange(obj, state);
+        vtable.onStateChange(obj, state);
 
         return .{
             .allocator = allocator,
             .state = state,
             .handlerPtr = obj,
-            .onStateChange = onStateChange,
+            .vtable = vtable,
         };
     }
 
@@ -141,26 +160,34 @@ pub const LocalClient = struct {
                 },
             });
         }
-        self.onStateChange(self.handlerPtr, self.state);
+        self.vtable.onStateChange(self.handlerPtr, self.state);
     }
 };
 
 // try using this https://github.com/karlseguin/websocket.zig
 // remote ai will emit events as it is
+// the client should also be able to join a game instead of just starting it
 pub const RemoteClient = struct {
     allocator: Allocator,
     connInfo: ConnectionInfo,
     state: game.ResolvedState,
     // todo onStateChange: *const fn (ctx: *anyopaque, state: game.ResolvedState) void,
 
+    handlerPtr: *anyopaque,
+    vtable: *const VTable,
+
     const ConnectionInfo = struct {
         serverUrl: []const u8,
         token: []const u8,
     };
 
-    pub fn init(allocator: Allocator, conn_info: ConnectionInfo, start_event: events.StartGameEvent) !RemoteClient {
+    /// obj must implement the following function:
+    /// fn onStateChange(self: *@This(), state: game.ResolvedState) void {}
+    pub fn initStart(allocator: Allocator, conn_info: ConnectionInfo, start_event: events.StartGameEvent, obj: anytype) !RemoteClient {
         var state = try game.ResolvedState.init(allocator, start_event);
         errdefer state.deinit(allocator);
+
+        // TODO: establish websockets
 
         switch (start_event) {
             .withAi => |ev| {
@@ -183,15 +210,20 @@ pub const RemoteClient = struct {
             },
         }
 
-        // TODO: establish websockets
+        const vtable = createVTable(obj);
 
         return .{
             .allocator = allocator,
             .state = state,
             .connInfo = conn_info,
+            .handlerPtr = obj,
+            .vtable = vtable,
         };
     }
 
+    // pub fn initJoin(allocator: Allocator, conn_info: ConnectionInfo, join_code: []const u8) !RemoteClient {
+
+    // }
     // also need a function to init already running game?
 
     pub fn deinit(self: *RemoteClient) void {
