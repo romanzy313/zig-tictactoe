@@ -6,6 +6,16 @@ pub const Difficulty = enum {
     easy,
     medium,
     hard,
+
+    pub fn fromString(val: []u8) !Difficulty {
+        inline for (@typeInfo(Difficulty).Enum.fields) |f| {
+            // std.debug.print("{d} {s}\n", .{ f.value, f.name });
+            if (std.mem.eql(u8, f.name, val)) {
+                return @enumFromInt(f.value);
+            }
+        }
+        return error.InvalidDifficulty;
+    }
 };
 
 pub fn getMove(difficulty: Difficulty, board: Board) !Board.CellPosition {

@@ -91,7 +91,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    // shared_modules.addModulesToExe(&tests_common.root_module);
+    shared_modules.addModulesToExe(&tests_common.root_module);
     const run_tests_common = b.addRunArtifact(tests_common);
 
     const tests_cli = b.addTest(.{

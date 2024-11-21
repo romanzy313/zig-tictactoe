@@ -25,3 +25,9 @@
 //     [_]u32{ 3, 4 },
 //     [_]u32{ 5, 6 },
 // };
+
+// allocating []const []const u8 can be done like so:
+// var y: []const []const u8 = &.{
+//     "hello",
+//     "world",
+// };

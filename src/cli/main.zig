@@ -12,9 +12,6 @@ const input = @import("input.zig");
 
 // this is main for cli only!
 pub fn main() !void {
-    const raw = try input.RawMode.init(false);
-    defer raw.deinit();
-
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -22,14 +19,24 @@ pub fn main() !void {
     // Parse arguments here
     const board_size = 5;
 
-    const cfg = try config.parseConfigFromArgs(allocator);
-    cfg.debugPrint(); // will be cleared when game is ran!
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
+
+    const cfg = try config.parseConfig(allocator, args[1..]);
+
+    std.debug.print("config is {any}\n", .{cfg});
+    std.process.exit(0);
+
+    // cfg.debugPrint(); // will be cleared when game is ran!
+
+    const raw = try input.RawMode.init(false);
+    defer raw.deinit();
 
     const stdin = std.io.getStdIn().reader().any();
     const stdout = std.io.getStdOut().writer().any();
 
-    // create instance and client
-    // classic fuckery: client needs instance and instance need client...
+    // create handler and client
+    // classic dilemma: client needs handler and handler need client...
     var game_handler = handler.GameHandler.init(stdin, stdout, board_size);
     var game_client = client.Client{
         .local = try client.LocalClient.init(
