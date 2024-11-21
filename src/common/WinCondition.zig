@@ -48,23 +48,23 @@ fn checkAnySize(grid: [][]Board.CellValue, size: usize) ?WinCondition {
         for (0..size) |x| { // column
             const cell = grid[y][x];
             switch (cell) {
-                .Empty => {
+                .empty => {
                     count = 0;
                     continue;
                 },
-                .X => count += 1,
-                .O => count -= 1,
+                .x => count += 1,
+                .o => count -= 1,
             }
 
             // std.debug.print("HOR: we are going over x = {}, y = {}, count = {}\n", .{ x, y, count });
 
             if (count == win_count) return WinCondition{
-                .side = .X,
+                .side = .x,
                 .dir = .hor,
                 .startsAt = .{ .x = x + 1 - win_count_usize, .y = y },
             };
             if (count == -win_count) return WinCondition{
-                .side = .O,
+                .side = .o,
                 .dir = .hor,
                 .startsAt = .{ .x = x + 1 - win_count_usize, .y = y },
             };
@@ -78,22 +78,22 @@ fn checkAnySize(grid: [][]Board.CellValue, size: usize) ?WinCondition {
         for (0..size) |y| {
             const cell = grid[y][x];
             switch (cell) {
-                .Empty => {
+                .empty => {
                     count = 0;
                     continue;
                 },
-                .X => count += 1,
-                .O => count -= 1,
+                .x => count += 1,
+                .o => count -= 1,
             }
             // std.debug.print("VERT: we are going over x = {}, y = {}, count = {}\n", .{ x, y, count });
 
             if (count == win_count) return WinCondition{
-                .side = .X,
+                .side = .x,
                 .dir = .vert,
                 .startsAt = .{ .x = x, .y = y + 1 - win_count_usize },
             };
             if (count == -win_count) return WinCondition{
-                .side = .O,
+                .side = .o,
                 .dir = .vert,
                 .startsAt = .{ .x = x, .y = y + 1 - win_count_usize },
             };
@@ -108,20 +108,20 @@ fn checkAnySize(grid: [][]Board.CellValue, size: usize) ?WinCondition {
             // std.debug.print("DIAG: we are going over dx = {}, dy = {}\n", .{ dx, dy });
 
             // going down
-            if (grid[dy][dx] != .Empty and grid[dy][dx] == grid[dy + 1][dx + 1] and grid[dy + 1][dx + 1] == grid[dy + 2][dx + 2]) {
+            if (grid[dy][dx] != .empty and grid[dy][dx] == grid[dy + 1][dx + 1] and grid[dy + 1][dx + 1] == grid[dy + 2][dx + 2]) {
                 const side: game.PlayerSide = switch (grid[dy][dx]) {
-                    .X => .X,
-                    .O => .O,
+                    .x => .x,
+                    .o => .o,
                     else => unreachable,
                 };
                 return WinCondition{ .side = side, .dir = .diagDown, .startsAt = .{ .x = dx, .y = dy } };
             }
 
             // going up
-            if (grid[dy + 2][dx] != .Empty and grid[dy + 2][dx] == grid[dy + 1][dx + 1] and grid[dy + 1][dx + 1] == grid[dy][dx + 2]) {
+            if (grid[dy + 2][dx] != .empty and grid[dy + 2][dx] == grid[dy + 1][dx + 1] and grid[dy + 1][dx + 1] == grid[dy][dx + 2]) {
                 const side: game.PlayerSide = switch (grid[dy + 2][dx]) {
-                    .X => .X,
-                    .O => .O,
+                    .x => .x,
+                    .o => .o,
                     else => unreachable,
                 };
                 return WinCondition{ .side = side, .dir = .diagUp, .startsAt = .{ .x = dx, .y = dy + 2 } };
@@ -143,7 +143,7 @@ test checkAnySize {
     var hor1 = try Board.parseFromSlice(testing.allocator, "---xxx---");
     defer hor1.deinit(testing.allocator);
     try testing.expectEqualDeep(WinCondition{
-        .side = .X,
+        .side = .x,
         .startsAt = .{ .x = 0, .y = 1 },
         .dir = .hor,
     }, checkAnySize(hor1.grid, @as(usize, 3)));
@@ -151,7 +151,7 @@ test checkAnySize {
     var hor2 = try Board.parseFromSlice(testing.allocator, "-x--xxooo");
     defer hor2.deinit(testing.allocator);
     try testing.expectEqualDeep(WinCondition{
-        .side = .O,
+        .side = .o,
         .startsAt = .{ .x = 0, .y = 2 },
         .dir = .hor,
     }, checkAnySize(hor2.grid, @as(usize, 3)));
@@ -159,7 +159,7 @@ test checkAnySize {
     var vert1 = try Board.parseFromSlice(testing.allocator, "-x--x--x-");
     defer vert1.deinit(testing.allocator);
     try testing.expectEqualDeep(WinCondition{
-        .side = .X,
+        .side = .x,
         .startsAt = .{ .x = 1, .y = 0 },
         .dir = .vert,
     }, checkAnySize(vert1.grid, @as(usize, 3)));
@@ -167,7 +167,7 @@ test checkAnySize {
     var vert2 = try Board.parseFromSlice(testing.allocator, "-xo-xo--o");
     defer vert2.deinit(testing.allocator);
     try testing.expectEqualDeep(WinCondition{
-        .side = .O,
+        .side = .o,
         .startsAt = .{ .x = 2, .y = 0 },
         .dir = .vert,
     }, checkAnySize(vert2.grid, @as(usize, 3)));
@@ -175,7 +175,7 @@ test checkAnySize {
     var diagDown = try Board.parseFromSlice(testing.allocator, "x---x---x");
     defer diagDown.deinit(testing.allocator);
     try testing.expectEqualDeep(WinCondition{
-        .side = .X,
+        .side = .x,
         .startsAt = .{ .x = 0, .y = 0 },
         .dir = .diagDown,
     }, checkAnySize(diagDown.grid, @as(usize, 3)));
@@ -183,7 +183,7 @@ test checkAnySize {
     var diagUp = try Board.parseFromSlice(testing.allocator, "--o-o-o--");
     defer diagUp.deinit(testing.allocator);
     try testing.expectEqualDeep(WinCondition{
-        .side = .O,
+        .side = .o,
         .startsAt = .{ .x = 0, .y = 2 },
         .dir = .diagUp,
     }, checkAnySize(diagUp.grid, @as(usize, 3)));

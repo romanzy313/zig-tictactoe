@@ -11,18 +11,19 @@ const Ai = @import("Ai.zig");
 const events = @import("events.zig");
 
 pub const Status = enum {
-    Stalemate,
-    TurnX,
-    TurnO,
-    WinX,
-    WinO,
+    // TODO: add idle
+    stalemate,
+    turnX,
+    turnO,
+    winX,
+    winO,
 
     pub fn isPlaying(self: Status) bool {
-        return self == .TurnX or self == .TurnO;
+        return self == .turnX or self == .turnO;
     }
 };
 
-pub const PlayerSide = enum { X, O };
+pub const PlayerSide = enum { x, o };
 
 pub const GameMode = enum {
     withAi,
@@ -38,6 +39,9 @@ pub const ResolvedState = struct {
     mode: GameMode,
     ai: ?Ai.Difficulty,
 
+    // init must take in an array of events
+    // must not pass the first event explicitly
+    // so it is totally possible for there to be no board present?
     pub fn init(allocator: Allocator, startGameEvent: events.StartGameEvent) !ResolvedState {
         const board = try Board.initEmpty(allocator, startGameEvent.boardSize());
 
@@ -49,7 +53,7 @@ pub const ResolvedState = struct {
 
         return .{
             .board = board,
-            .status = .TurnX,
+            .status = .turnX,
             .mode = startGameEvent.gameMode(),
             .ai = ai,
         };
@@ -100,7 +104,7 @@ pub const ResolvedState = struct {
 
     fn handleMakeMoveEvent(self: *ResolvedState, pos: Board.CellPosition) !Status {
         const size = self.board.size;
-        if (self.status != .TurnX and self.status != .TurnO) {
+        if (self.status != .turnX and self.status != .turnO) {
             return error.GameFinished;
         }
 
@@ -109,14 +113,14 @@ pub const ResolvedState = struct {
         }
 
         const selected = self.board.getValue(pos);
-        if (selected != .Empty) {
+        if (selected != .empty) {
             return error.CannotSelectAlreadySelected;
         }
 
         // mutate the grid
         switch (self.status) {
-            .TurnX => self.board.setValue(pos, .X),
-            .TurnO => self.board.setValue(pos, .O),
+            .turnX => self.board.setValue(pos, .x),
+            .turnO => self.board.setValue(pos, .o),
             else => unreachable,
         }
 
@@ -126,21 +130,21 @@ pub const ResolvedState = struct {
 
         if (maybe_win_condition) |win| {
             switch (win.side) {
-                .X => return .WinX,
-                .O => return .WinO,
+                .x => return .winX,
+                .o => return .winO,
             }
         }
 
         // check if there are available moves
         if (self.board.hasMovesAvailable()) {
             switch (self.status) {
-                .TurnX => return .TurnO,
-                .TurnO => return .TurnX,
+                .turnX => return .turnO,
+                .turnO => return .turnX,
                 else => unreachable,
             }
         }
 
-        return .Stalemate;
+        return .stalemate;
     }
 };
 
@@ -191,7 +195,7 @@ pub const GamePlayers = struct {
 test "grid init" {
     var state = try ResolvedState.init(testing_allocator, .{ .multiplayer = .{
         .boardSize = 3,
-        .playerSide = .X,
+        .playerSide = .x,
     } });
     defer state.deinit(testing_allocator);
 
@@ -212,18 +216,18 @@ test "grid init" {
 test "make move" {
     var state = try ResolvedState.init(testing_allocator, .{ .multiplayer = .{
         .boardSize = 3,
-        .playerSide = .X,
+        .playerSide = .x,
     } });
     defer state.deinit(testing_allocator);
-    try testing.expectEqual(.TurnX, state.status);
+    try testing.expectEqual(.turnX, state.status);
 
     try state.resolveEvent(events.Event{ .makeMove = .{ .position = .{ .x = 2, .y = 1 } } });
     try testing.expectEqual(1, state.seqId);
-    try testing.expectEqual(.TurnO, state.status);
+    try testing.expectEqual(.turnO, state.status);
 
     try state.resolveEvent(events.Event{ .makeMove = .{ .position = .{ .x = 0, .y = 0 } } });
     try testing.expectEqual(2, state.seqId);
-    try testing.expectEqual(.TurnX, state.status);
+    try testing.expectEqual(.turnX, state.status);
 
     // removed
     // var list = ArrayList(u8).init(testing_allocator);
@@ -241,7 +245,7 @@ test "make move" {
 test "make move errors" {
     var state = try ResolvedState.init(testing_allocator, .{ .multiplayer = .{
         .boardSize = 3,
-        .playerSide = .X,
+        .playerSide = .x,
     } });
     defer state.deinit(testing_allocator);
 
@@ -251,7 +255,7 @@ test "make move errors" {
 
     try std.testing.expectError(error.CannotSelectAlreadySelected, state.resolveEvent(.{ .makeMove = .{ .position = .{ .x = 1, .y = 1 } } }));
 
-    state.status = .Stalemate;
+    state.status = .stalemate;
 
     try std.testing.expectError(error.GameFinished, state.resolveEvent(.{ .makeMove = .{ .position = .{ .x = 1, .y = 1 } } }));
 }

@@ -103,7 +103,7 @@ pub const LocalClient = struct {
         switch (start_event) {
             .withAi => |ev| {
                 // ai makes the first move if needed
-                if (ev.playerSide == .O) {
+                if (ev.playerSide == .o) {
                     const pos = try Ai.getMove(ev.aiDifficulty, state.board);
 
                     try state.resolveEvent(.{
@@ -115,7 +115,7 @@ pub const LocalClient = struct {
             },
             .multiplayer => |ev| {
                 // check that X must always be started
-                if (ev.playerSide != .X) {
+                if (ev.playerSide != .x) {
                     return error.InvalidSideInLocalMultiplayer;
                 }
             },
@@ -271,7 +271,7 @@ test LocalClient {
         .local = try LocalClient.init(
             testing_allocator,
             .{
-                .withAi = .{ .aiDifficulty = .easy, .boardSize = 3, .playerSide = .O },
+                .withAi = .{ .aiDifficulty = .easy, .boardSize = 3, .playerSide = .o },
             },
             &instance,
         ),
@@ -283,38 +283,16 @@ test LocalClient {
     // for now dumest non-prod is used
     // or use easy ai with a initialization seed
     try testing.expectEqual(1, instance.count);
-    try testing.expectEqual(.TurnO, client.state().status);
+    try testing.expectEqual(.turnO, client.state().status);
 
-    // FIXME: this failed again... until I satisfied the *const requirement...
-    // src/common/client.zig:256:53: error: expected type '*Board', found '*const Board'
-    //     try testing.expectEqual(.X, client.state().board.getValue(.{ .x = 0, .y = 0 }));
-    //                                 ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~
-    // src/common/client.zig:256:53: note: cast discards const qualifier
-    // src/common/Board.zig:58:23: note: parameter type declared here
-    // pub fn getValue(self: *Board, pos: CellPosition) CellValue {
-
-    try testing.expectEqual(.X, client.state().board.getValue(.{ .x = 0, .y = 0 }));
+    try testing.expectEqual(.x, client.state().board.getValue(.{ .x = 0, .y = 0 }));
 
     try client.handleEvent(.{ .makeMove = .{ .position = .{ .x = 1, .y = 1 } } });
     try testing.expectEqual(2, instance.count);
-    try testing.expectEqual(.TurnO, client.state().status);
-    try testing.expectEqual(.O, client.state().board.getValue(.{ .x = 1, .y = 1 }));
-    try testing.expectEqual(.X, client.state().board.getValue(.{ .x = 1, .y = 0 })); // CAREFULL, this was modified!!!// this is hardcoded for now
+    try testing.expectEqual(.turnO, client.state().status);
+    try testing.expectEqual(.o, client.state().board.getValue(.{ .x = 1, .y = 1 }));
+    try testing.expectEqual(.x, client.state().board.getValue(.{ .x = 1, .y = 0 })); //CAREFUL!!! this is hardcoded for now
 
-    // const gotten_state = client.state();
-    // client.state().grid[1][1] = .O;
-    // client.state().grid[2][2] = .X;
-
-    // I can mutate the original... how wierd, its not a pointer, but it has self *ResolvedState...
-    // client.state().grid[1][1] = .O;
-    // client.state().grid[2][2] = .X;
-    // var state = client.state();
-    // state.debugPrint();
-
-    // can i mutate it deeply when its not even a pointer?
-    // no I cant!
-    // instance.state.seqId = 69;
-    // try testing.expectEqual(69, client.state().seqId);
 }
 
 test "nested mutations" {
@@ -323,7 +301,7 @@ test "nested mutations" {
         .local = try LocalClient.init(
             testing_allocator,
             .{
-                .multiplayer = .{ .boardSize = 3, .playerSide = .X },
+                .multiplayer = .{ .boardSize = 3, .playerSide = .x },
             },
             &instance,
         ),
@@ -338,22 +316,22 @@ test "nested mutations" {
     // all pointer values are different...
     // std.debug.print("stored:\t\t{*}\nimmediate:\t{*}\ninstance:\t{*}\n\n", .{ &stored, &client.state(), &instance.state });
 
-    try testing.expectEqual(client.state().board.grid[0][0], .Empty);
+    try testing.expectEqual(client.state().board.grid[0][0], .empty);
 
-    client.state().board.grid[0][0] = .X;
+    client.state().board.grid[0][0] = .x;
 
-    try testing.expectEqual(stored.board.grid[0][0], .X);
-    try testing.expectEqual(client.state().board.grid[0][0], .X);
-    try testing.expectEqual(instance.state.board.grid[0][0], .X);
+    try testing.expectEqual(stored.board.grid[0][0], .x);
+    try testing.expectEqual(client.state().board.grid[0][0], .x);
+    try testing.expectEqual(instance.state.board.grid[0][0], .x);
 
     // std.debug.print("stored:\t\t{*}\nimmediate:\t{*}\ninstance:\t{*}\n\n", .{ &stored, &client.state(), &instance.state });
 
     // try instance.state.board.setValue(.{1,1}, .O);
-    instance.state.board.grid[1][1] = .O;
+    instance.state.board.grid[1][1] = .o;
 
-    try testing.expectEqual(stored.board.grid[1][1], .O);
-    try testing.expectEqual(client.state().board.grid[1][1], .O);
-    try testing.expectEqual(instance.state.board.grid[1][1], .O);
+    try testing.expectEqual(stored.board.grid[1][1], .o);
+    try testing.expectEqual(client.state().board.grid[1][1], .o);
+    try testing.expectEqual(instance.state.board.grid[1][1], .o);
 
     // std.debug.print("stored:\t\t{*}\nimmediate:\t{*}\ninstance:\t{*}\n\n", .{ &stored, &client.state(), &instance.state });
 

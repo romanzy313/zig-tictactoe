@@ -12,9 +12,9 @@ pub fn render(writer: std.io.AnyWriter, state: game.ResolvedState, selection: Bo
     for (state.board.grid, 0..) |row, i| {
         for (row, 0..) |cell, j| {
             const value: *const [1]u8 = switch (cell) {
-                .Empty => "-",
-                .X => "x",
-                .O => "o",
+                .empty => "-",
+                .x => "x",
+                .o => "o",
             };
 
             const is_selected = selection.y == i and selection.x == j;
@@ -32,11 +32,11 @@ pub fn render(writer: std.io.AnyWriter, state: game.ResolvedState, selection: Bo
 
     // handle state accordingly.
     switch (state.status) {
-        .TurnX => try writer.print("Player X turn\n", .{}),
-        .TurnO => try writer.print("Player O turn\n", .{}),
-        .WinX => try writer.print("Player X won\n", .{}),
-        .WinO => try writer.print("Player O won\n", .{}),
-        .Stalemate => try writer.print("Stalemate\n", .{}),
+        .turnX => try writer.print("Player X turn\n", .{}),
+        .turnO => try writer.print("Player O turn\n", .{}),
+        .winX => try writer.print("Player X won\n", .{}),
+        .winO => try writer.print("Player O won\n", .{}),
+        .stalemate => try writer.print("Stalemate\n", .{}),
     }
 
     if (err == null) {

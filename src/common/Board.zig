@@ -16,7 +16,7 @@ const max_board_size = 50;
 /// y increments down
 pub const CellPosition = struct { x: usize, y: usize };
 
-pub const CellValue = enum { Empty, X, O };
+pub const CellValue = enum { empty, x, o };
 
 const Board = @This();
 
@@ -35,7 +35,7 @@ pub fn initEmpty(allocator: Allocator, size: usize) !Board {
     for (grid) |*row| {
         row.* = try allocator.alloc(CellValue, size);
         for (row.*) |*cell| {
-            cell.* = .Empty;
+            cell.* = .empty;
         }
     }
 
@@ -79,7 +79,7 @@ pub fn setValue(self: *Board, pos: CellPosition, value: CellValue) void {
 pub fn hasMovesAvailable(self: *Board) bool {
     for (self.grid) |row| {
         for (row) |cell| {
-            if (cell == .Empty) {
+            if (cell == .empty) {
                 return true;
             }
         }
@@ -100,9 +100,9 @@ pub fn serialize(self: *Board, allocator: Allocator) ![]const u8 {
     for (self.grid) |row| {
         for (row) |cell| {
             switch (cell) {
-                .Empty => list.appendAssumeCapacity('-'),
-                .X => list.appendAssumeCapacity('x'),
-                .O => list.appendAssumeCapacity('o'),
+                .empty => list.appendAssumeCapacity('-'),
+                .x => list.appendAssumeCapacity('x'),
+                .o => list.appendAssumeCapacity('o'),
             }
         }
     }
@@ -131,9 +131,9 @@ pub fn parseFromSlice(allocator: Allocator, slice: []const u8) !Board {
         for (row.*, 0..) |*cell, x| {
             const v = slice[x + size * y];
             cell.* = switch (v) {
-                '-' => .Empty,
-                'x' => .X,
-                'o' => .O,
+                '-' => .empty,
+                'x' => .x,
+                'o' => .o,
                 else => unreachable,
             };
         }
@@ -145,7 +145,7 @@ pub fn parseFromSlice(allocator: Allocator, slice: []const u8) !Board {
     };
 }
 
-pub fn jsonStringify(self: Board, out_writer: anytype) !void {
+pub fn jsonStringify(self: Board, out_writer: anytype) error{OutOfMemory}!void {
     // size could reach 50*50!
     const hacky_size = 10 * 10;
 
@@ -158,9 +158,9 @@ pub fn jsonStringify(self: Board, out_writer: anytype) !void {
     for (self.grid) |row| {
         for (row) |cell| {
             switch (cell) {
-                .Empty => _ = hack.append('-') catch unreachable, // not nice either
-                .X => _ = hack.append('x') catch unreachable,
-                .O => _ = hack.append('o') catch unreachable,
+                .empty => _ = hack.appendAssumeCapacity('-'), // not nice either
+                .x => _ = hack.appendAssumeCapacity('x'),
+                .o => _ = hack.appendAssumeCapacity('o'),
             }
         }
     }
@@ -175,9 +175,9 @@ pub fn jsonStringifyIdeal(self: Board, out_writer: anytype) !void {
     for (self.grid) |row| {
         for (row) |cell| {
             switch (cell) {
-                .Empty => _ = try out_writer.writeByte('-'),
-                .X => _ = try out_writer.writeByte('x'),
-                .O => _ = try out_writer.writeByte('o'),
+                .empty => _ = try out_writer.writeByte('-'),
+                .x => _ = try out_writer.writeByte('x'),
+                .o => _ = try out_writer.writeByte('o'),
             }
         }
     }
@@ -205,9 +205,9 @@ pub fn debugPrint(self: *Board) void {
     for (self.grid) |row| {
         for (row) |cell| {
             switch (cell) {
-                .Empty => print("-", .{}),
-                .X => print("x", .{}),
-                .O => print("o", .{}),
+                .empty => print("-", .{}),
+                .x => print("x", .{}),
+                .o => print("o", .{}),
             }
             print(" ", .{});
         }
@@ -267,9 +267,9 @@ test initEmpty {
 
 test serialize {
     const staticVal = [3][3]CellValue{
-        [_]CellValue{ .Empty, .Empty, .Empty },
-        [_]CellValue{ .Empty, .X, .O },
-        [_]CellValue{ .Empty, .Empty, .Empty },
+        [_]CellValue{ .empty, .empty, .empty },
+        [_]CellValue{ .empty, .x, .o },
+        [_]CellValue{ .empty, .empty, .empty },
     };
     var grid = makeTestBoardStatic(3, staticVal).withAllocator(testing.allocator);
     defer grid.deinit(testing.allocator);
@@ -284,9 +284,9 @@ test parseFromSlice {
     var okGrid = try parseFromSlice(testing.allocator, "----xo---");
     defer okGrid.deinit(testing.allocator);
 
-    try testing.expectEqual(.Empty, okGrid.grid[0][0]);
-    try testing.expectEqual(.X, okGrid.grid[1][1]);
-    try testing.expectEqual(.O, okGrid.grid[1][2]);
+    try testing.expectEqual(.empty, okGrid.grid[0][0]);
+    try testing.expectEqual(.x, okGrid.grid[1][1]);
+    try testing.expectEqual(.o, okGrid.grid[1][2]);
 
     // now check bad inputs
     try testing.expectError(error.NotPerfectSquare, parseFromSlice(testing.allocator, "-----"));
@@ -297,9 +297,9 @@ test "jsonification" {
     const T = struct { board: Board };
 
     const staticVal = [3][3]CellValue{
-        [_]CellValue{ .Empty, .Empty, .Empty },
-        [_]CellValue{ .Empty, .X, .O },
-        [_]CellValue{ .Empty, .Empty, .Empty },
+        [_]CellValue{ .empty, .empty, .empty },
+        [_]CellValue{ .empty, .x, .o },
+        [_]CellValue{ .empty, .empty, .empty },
     };
     var grid = makeTestBoardStatic(3, staticVal).withAllocator(testing.allocator);
     defer grid.deinit(testing.allocator);
@@ -325,14 +325,14 @@ test "jsonification" {
 
 test makeTestBoardStatic {
     const staticVal = [3][3]CellValue{
-        [_]CellValue{ .Empty, .Empty, .Empty },
-        [_]CellValue{ .Empty, .X, .O },
-        [_]CellValue{ .Empty, .Empty, .Empty },
+        [_]CellValue{ .empty, .empty, .empty },
+        [_]CellValue{ .empty, .x, .o },
+        [_]CellValue{ .empty, .empty, .empty },
     };
     var grid = makeTestBoardStatic(3, staticVal).withAllocator(testing.allocator);
     defer grid.deinit(testing.allocator);
 
-    try testing.expectEqual(.Empty, grid.grid[0][0]);
-    try testing.expectEqual(.X, grid.grid[1][1]);
-    try testing.expectEqual(.O, grid.grid[1][2]);
+    try testing.expectEqual(.empty, grid.grid[0][0]);
+    try testing.expectEqual(.x, grid.grid[1][1]);
+    try testing.expectEqual(.o, grid.grid[1][2]);
 }

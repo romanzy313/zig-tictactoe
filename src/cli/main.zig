@@ -25,7 +25,7 @@ pub fn main() !void {
     const cfg = try config.parseConfig(allocator, args[1..]);
 
     std.debug.print("config is {any}\n", .{cfg});
-    std.process.exit(0);
+    // std.process.exit(0);
 
     // cfg.debugPrint(); // will be cleared when game is ran!
 
@@ -42,8 +42,8 @@ pub fn main() !void {
         .local = try client.LocalClient.init(
             allocator,
             .{
-                //.withAi = .{ .aiDifficulty = .easy, .boardSize = board_size, .playerSide = .X },
-                .multiplayer = .{ .boardSize = board_size, .playerSide = .X },
+                //.withAi = .{ .aiDifficulty = .easy, .boardSize = board_size, .playerSide = .x },
+                .multiplayer = .{ .boardSize = board_size, .playerSide = .x },
             },
             &game_handler,
         ),

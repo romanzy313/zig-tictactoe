@@ -30,7 +30,7 @@ fn easyMove(board: Board) !Board.CellPosition {
     // TODO: try an iterator?
     for (board.grid, 0..) |col, y| {
         for (col, 0..) |cell, x| {
-            if (cell == .Empty) {
+            if (cell == .empty) {
                 return .{ .x = x, .y = y };
             }
         }
