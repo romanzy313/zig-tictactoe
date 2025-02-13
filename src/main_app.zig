@@ -1,14 +1,14 @@
 const std = @import("std");
 const debug = std.debug;
 
-const game = @import("common").game;
-const client = @import("common").client;
-const Ai = @import("common").Ai;
-const events = @import("common").events;
-const handler = @import("handler.zig");
+const game = @import("game.zig");
+const client = @import("client.zig");
+const Ai = @import("Ai.zig");
+const events = @import("events.zig");
+const handler = @import("cli/handler.zig");
 
 const config = @import("config.zig");
-const input = @import("input.zig");
+const input = @import("cli/input.zig");
 
 // this is main for cli only!
 pub fn main() !void {
@@ -57,11 +57,9 @@ pub fn main() !void {
     try game_handler.run();
 }
 
-// tests to evaluate are defined here.
-// hardcoded, as std.testing.refAllDeclsRecursive(@This()); will try to test "@import("common").ai.Ai"
-test {
-    _ = @import("config.zig");
-    _ = @import("handler.zig");
-    _ = @import("input.zig");
-    _ = @import("renderer.zig");
-}
+// maybe could be a good idea to use std.testing.refAllDeclsRecursive(@This())
+// so that all files used here are tested?
+// for now all tests are in root.zig
+// comptime {
+//     std.testing.refAllDeclsRecursive(@This());
+// }

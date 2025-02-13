@@ -3,8 +3,8 @@ const fs = std.fs;
 const linux = std.os.linux;
 const control_code = std.ascii.control_code;
 const testing = std.testing;
-const game = @import("common").game;
-const Board = @import("common").Board;
+const game = @import("../game.zig");
+const Board = @import("../Board.zig");
 
 pub const CliCommand = enum {
     // None,

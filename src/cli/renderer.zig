@@ -1,6 +1,6 @@
 const std = @import("std");
-const game = @import("common").game;
-const Board = @import("common").Board;
+const game = @import("../game.zig");
+const Board = @import("../Board.zig");
 
 const ansi_normal: []const u8 = "\u{001b}[0m";
 const ansi_selected: []const u8 = "\u{001b}[7m";

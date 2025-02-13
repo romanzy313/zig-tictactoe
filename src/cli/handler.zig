@@ -1,10 +1,10 @@
 const std = @import("std");
 const testing = std.testing;
 
-const game = @import("common").game;
+const game = @import("../game.zig");
 const input = @import("input.zig");
-const events = @import("common").events;
-const client = @import("common").client;
+const events = @import("../events.zig");
+const client = @import("../client.zig");
 const render = @import("renderer.zig").render;
 
 pub const GameHandler = struct {
@@ -20,7 +20,7 @@ pub const GameHandler = struct {
         return .{
             .reader = reader,
             .writer = writer,
-            .nav = input.Navigation.init(board_size), 
+            .nav = input.Navigation.init(board_size),
         };
     }
 

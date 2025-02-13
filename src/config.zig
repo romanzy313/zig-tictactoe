@@ -4,8 +4,8 @@ const fmt = std.fmt;
 const debug = std.debug;
 const Allocator = std.mem.Allocator;
 
-const game = @import("common").game;
-const Ai = @import("common").Ai;
+const game = @import("game.zig");
+const Ai = @import("Ai.zig");
 
 const default_host = "localhost";
 const default_port: u16 = 5432;

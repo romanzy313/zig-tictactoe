@@ -1,21 +1,19 @@
 const std = @import("std");
 const testing = std.testing;
 
-// pub const common = @import("common"); // test all common tests
-// pub const client = @import("client");
-// pub const server = @import("server");
-
-// add files to be tested here...
-// https://stackoverflow.com/questions/75762207/how-to-test-multiple-files-in-zig
 comptime {
-    // _ = @import("common/game.zig");
+    // _ = @import("main_app.zig");
+    // _ = @import("main_server.zig");
 
-    // _ = @import("client/cli.zig");
-    // _ = @import("client/input.zig");
+    // add any non-imported things here
 
-    // _ = @import("server/game_repo.zig");
+    _ = @import("config.zig");
+    _ = @import("Board.zig");
+    _ = @import("client.zig");
+    _ = @import("game.zig");
+    _ = @import("WinCondition.zig");
+
+    _ = @import("cli/handler.zig");
+    _ = @import("cli/input.zig");
+    _ = @import("cli/renderer.zig");
 }
-
-// test {
-//     testing.refAllDecls(@This());
-// }
