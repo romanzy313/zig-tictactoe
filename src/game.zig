@@ -405,8 +405,14 @@ const TestPublisherEnvelope = struct {
 
     pub fn publishEnvelope(self: *TestPublisherEnvelope, ev: EventEnvelope) void {
         log.warn("appending event event {any}", .{ev});
-        self.values.append(ev) catch @panic("event overflow");
-        log.warn("after appen {any}", .{self.values.buffer[0]});
+        // log.warn("self is {any}", .{self}); // seg fault again...
+        self.values.append(ev) catch |err| {
+            log.err("FAILED TO APPEND {any}", .{err});
+
+            @panic("OUT OF BUFFERS");
+        };
+
+        log.warn("after append slice:  {any}", .{self.values.buffer});
     }
 };
 
@@ -430,12 +436,13 @@ fn ScopedGameInstanceGeneric(
         ) ScopedGameInstance {
             return ScopedGameInstance{
                 .ptr_publisher_envelope = ptr_publisher_envelope,
-                .game_id = game_id.copy(),
+                .game_id = game_id,
                 .game = undefined,
             };
         }
 
         pub fn initStage2(self: *ScopedGameInstance, allocator: Allocator, events: []const Event) !void {
+            log.warn("DIAGNOSTICS: self: {any}\n\n\npublisher: {any}", .{ self, self.ptr_publisher_envelope });
             self.game = try GameType.init(allocator, self, events);
         }
 
@@ -458,7 +465,8 @@ fn ScopedGameInstanceGeneric(
                 // do something else!
             }
 
-            // double pointer lookup fails when the game tries to publish
+            // for some reason this is not pasing to the original one??
+            // i dont get this...
             publishEnvelope(self.ptr_publisher_envelope, envelope); // double pointer lookup!
         }
     };
@@ -519,16 +527,14 @@ pub fn GameServerGeneric(
             }
         }
 
-        pub fn newGame(self: *GameServer, id: UUID, events: []const Event) !void {
-            var internal_game_instance = Instance.init(self.ptr_publisher_envelope, id);
+        pub fn newGame(self: *GameServer, game_id: UUID, events: []const Event) !void {
+            var internal_game_instance = Instance.init(self.ptr_publisher_envelope, game_id);
             try internal_game_instance.initStage2(self.allocator, events);
 
             try self.instances.append(internal_game_instance);
             const index = self.instances.items.len - 1; // rough
 
-            log.warn("the internal instance from slice is {any}", .{self.instances.items[0]});
-
-            try self.lookup_map.put(id, index);
+            try self.lookup_map.put(game_id, index);
         }
         // https://ziggit.dev/t/problem-with-hashmaps/7221
         // var newList = std.ArrayList(Point).init(allocator);
@@ -559,6 +565,11 @@ pub fn GameServerGeneric(
 
 test "muliplexed game server" {
     var publisher = TestPublisherEnvelope.init();
+    // try publisher.values.append(.{ .timestamp = 33, .seqId = 33, .gameId = UUID.initFromNumber(33), .event = .{ .gameFinished = .{ .outcome = .oWon } } });
+    // try publisher.values.append(.{ .timestamp = 33, .seqId = 33, .gameId = UUID.initFromNumber(33), .event = .{ .gameFinished = .{ .outcome = .oWon } } });
+    // try publisher.values.append(.{ .timestamp = 33, .seqId = 33, .gameId = UUID.initFromNumber(33), .event = .{ .gameFinished = .{ .outcome = .oWon } } });
+    // it should not be possible to append anymore
+
     var server = GameServerGeneric(
         true,
         TestPublisherEnvelope,
@@ -589,13 +600,11 @@ test "muliplexed game server" {
     log.warn("CURRENT UUID!!!: {any}", .{server.getGameInstance(gameUUID).?.game_id});
     try testing.expectEqual(server.getGameInstance(gameUUID).?.game_id.bytes, gameUUID.bytes); // sequence must be moved into "metadata", and timestamp as well... I think timestamp is pretty important too
 
-    // outside the game_id is different...
-    // they are like infinetely nested, as pointer to self is badly resolved... so what now?
-    // accessing "game" yileds trash
-    log.warn("OUTSIDE the internal instance from slice is {any}", .{server.instances.items[0].game});
+    try testing.expectEqual(server.getGameInstance(gameUUID).?.game.seqId, 2); // sequence must be moved into "metadata", and timestamp as well... I think timestamp is pretty important too
+    try testing.expectEqual(server.getGameInstance(gameUUID).?.game.current_player, .x);
 
     server.onEnvelope(.{
-        .gameId = gameUUID,
+        .gameId = gameUUID.copy(),
         .timestamp = 55, //??? not done in any shape or form
         .seqId = 55, //???
         .event = .{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } },
@@ -611,31 +620,28 @@ test "muliplexed game server" {
         .seqId = 55, //???
         .event = .{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } },
     });
-
-    log.warn("BUFFER IS {any}", .{publisher.values.buffer});
-
-    // oh there were no sent events!
-    try testing.expectEqual(error.WrongSide, publisher.values.buffer[0].event.__runtimeError);
-    try testing.expectEqual(gameUUID.bytes, publisher.values.buffer[0].gameId.bytes);
-    try testing.expectEqual(100, publisher.values.buffer[0].timestamp); // hardcoded
-    // log.warn("game_map {any}", .{server.game_map});
-
-    // errornious event is sent
     // server.onEnvelope(.{
     //     .gameId = gameUUID,
-    //     .timestamp = 0, //???
-    //     .seqId = 0, //???
-    //     .event = .{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } }, // bad event, Segmentation fault at address 0x500000019...
-    //     // .event = .{ .moveMade = .{ .side = .o, .position = .{ .x = 1, .y = 1 } } }, // good event
+    //     .timestamp = 55, //??? not done in any shape or form
+    //     .seqId = 55, //???
+    //     .event = .{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } },
     // });
-
-    // try testing.expectEqual(publisher.values.buffer[0], EventEnvelope{
+    // server.onEnvelope(.{
     //     .gameId = gameUUID,
-    //     .seqId = 0,
-    //     .timestamp = 0,
-    //     .event = .{
-    //         .__runtimeError = error.AALLALA,
-    //     },
-    // }); // all these need refactoring
+    //     .timestamp = 55, //??? not done in any shape or form
+    //     .seqId = 55, //???
+    //     .event = .{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } },
+    // });
+    log.warn("BUFFER IS {any}", .{publisher.values.buffer});
 
+    // fuck this thing...
+
+    // FIXME: why is publisher buffer doesnt grow??? its wierd, events are emitting, but one one stays
+    // why is uuid not kept the same?
+    try testing.expectEqual(publisher.values.get(0), EventEnvelope{
+        .gameId = gameUUID,
+        .timestamp = 100,
+        .seqId = 5, // TODO
+        .event = .{ .__runtimeError = error.__runtimeError },
+    });
 }

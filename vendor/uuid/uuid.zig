@@ -44,6 +44,7 @@ pub const UUID = struct {
         return uuid;
     }
 
+    /// no idea if this is right, probably not
     pub fn copy(self: UUID) UUID {
         var uuid = UUID{ .bytes = undefined };
         @memcpy(&uuid.bytes, &self.bytes);

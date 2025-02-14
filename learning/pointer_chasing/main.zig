@@ -41,6 +41,8 @@ const GameProjection = struct {
         }
     }
 
+    // the only contraint here is that publisher + its vtable must be passed upon initialization
+    // but it should not be a problem, as the given implementation has awareness of it
     pub fn init(
         allocator: Allocator,
         ptr_publisher: *anyopaque,
@@ -124,7 +126,6 @@ const ScopedGame = struct {
     parent: *FullPublisher,
     game_id: u32,
     game: GameProjection,
-    // here we do all sorts of things such as dealing with incoming
 
     pub fn init(
         allocator: Allocator,
@@ -133,27 +134,16 @@ const ScopedGame = struct {
     ) ScopedGame {
 
         // first make a self
-        const self = ScopedGame{
+        return ScopedGame{
             .allocator = allocator,
             .parent = parent,
             .game_id = game_id,
             .game = undefined,
         };
-
-        // const game = try GameProjection.init(
-        //     allocator,
-        //     &self, // this is a problem here... it needs to be initialized first
-        //     &.{
-        //         .publishEvent = ___publishEvent,
-        //     },
-        // );
-        // self.game = game;
-
-        return self;
     }
 
     // i can do it like this
-    pub fn createGame(self: *ScopedGame) !void {
+    pub fn createGameAkaInitStage2(self: *ScopedGame) !void {
         self.game = try GameProjection.init(
             self.allocator,
             self,
@@ -162,18 +152,6 @@ const ScopedGame = struct {
             },
         );
     }
-
-    // pub fn handler(
-    //     self: *ScopedGame,
-    // ) !GameProjection {
-    //     return try GameProjection.init(
-    //         self.parent.allocator,
-    //         self, // self here!
-    //         &.{
-    //             .publishEvent = ___publishEvent,
-    //         },
-    //     );
-    // }
 
     pub fn ___publishEvent(ctx: *anyopaque, event: Event) void {
         const self: *ScopedGame = @ptrCast(@alignCast(ctx));
@@ -218,7 +196,7 @@ const FullPublisher = struct {
         // };
 
         self.instances[0] = ScopedGame.init(self.allocator, self, game_id);
-        try self.instances[0].?.createGame();
+        try self.instances[0].?.createGameAkaInitStage2();
         // also want to send it to it...
 
         return self.instances[0].?;
