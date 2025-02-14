@@ -119,20 +119,61 @@ test SinglePublisher {
 
 // this is when issues arrise
 const ScopedGame = struct {
+    allocator: Allocator,
+
     parent: *FullPublisher,
     game_id: u32,
+    game: GameProjection,
+    // here we do all sorts of things such as dealing with incoming
 
-    pub fn handler(
-        self: *ScopedGame,
-    ) !GameProjection {
-        return try GameProjection.init(
-            self.parent.allocator,
+    pub fn init(
+        allocator: Allocator,
+        parent: *FullPublisher,
+        game_id: u32,
+    ) ScopedGame {
+
+        // first make a self
+        const self = ScopedGame{
+            .allocator = allocator,
+            .parent = parent,
+            .game_id = game_id,
+            .game = undefined,
+        };
+
+        // const game = try GameProjection.init(
+        //     allocator,
+        //     &self, // this is a problem here... it needs to be initialized first
+        //     &.{
+        //         .publishEvent = ___publishEvent,
+        //     },
+        // );
+        // self.game = game;
+
+        return self;
+    }
+
+    // i can do it like this
+    pub fn createGame(self: *ScopedGame) !void {
+        self.game = try GameProjection.init(
+            self.allocator,
             self,
             &.{
                 .publishEvent = ___publishEvent,
             },
         );
     }
+
+    // pub fn handler(
+    //     self: *ScopedGame,
+    // ) !GameProjection {
+    //     return try GameProjection.init(
+    //         self.parent.allocator,
+    //         self, // self here!
+    //         &.{
+    //             .publishEvent = ___publishEvent,
+    //         },
+    //     );
+    // }
 
     pub fn ___publishEvent(ctx: *anyopaque, event: Event) void {
         const self: *ScopedGame = @ptrCast(@alignCast(ctx));
@@ -167,31 +208,33 @@ const FullPublisher = struct {
         };
     }
 
-    pub fn handlerForGame(self: *FullPublisher, game_id: u32) !GameProjection {
-        // this only works here and now
-        // i cant be doing this
+    // the trick here is to do everythnig in 2 steps
+    // Its not allowed to refernce a pointer to something that is in scope.
+    // pointer to self must be assigned after self is known
+    pub fn newGame(self: *FullPublisher, game_id: u32) !ScopedGame {
+        // self.instances[0] = ScopedGame{
+        //     .parent = self,
+        //     .game_id = game_id,
+        // };
 
-        self.instances[0] = ScopedGame{
-            .parent = self,
-            .game_id = game_id,
-        };
-
+        self.instances[0] = ScopedGame.init(self.allocator, self, game_id);
+        try self.instances[0].?.createGame();
         // also want to send it to it...
 
-        return try self.instances[0].?.handler();
+        return self.instances[0].?;
     }
 };
 
 test FullPublisher {
     var publisher = FullPublisher.init(testing.allocator);
-    var handler = try publisher.handlerForGame(40);
-    defer handler.deinit();
+    var scoped_game = try publisher.newGame(40);
+    defer scoped_game.game.deinit();
 
-    try handler.resolveEvent(.{ .data = 2, .done = false });
+    try scoped_game.game.resolveEvent(.{ .data = 2, .done = false });
 
     try testing.expectEqual(0, publisher.sent.len);
 
-    try handler.resolveEvent(.{ .data = 'a', .done = false });
+    try scoped_game.game.resolveEvent(.{ .data = 'a', .done = false });
 
     try testing.expectEqual(1, publisher.sent.len);
     try testing.expectEqual(40, publisher.sent.buffer[0].game_id);

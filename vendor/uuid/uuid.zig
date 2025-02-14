@@ -3,6 +3,11 @@
 // Fast allocation-free v4 UUIDs.
 // Inspired by the Go implementation at github.com/skeeto/uuid
 
+// reimplement and add uuidv7
+// https://dev.to/siddhantkcode/identifiers-101-understanding-and-implementing-uuids-and-ulids-2kc6
+// wants: eql, copy, sort, hashmap context
+// more info https://www.rfc-editor.org/rfc/rfc9562.html#name-uuid-version-2
+
 const std = @import("std");
 const crypto = std.crypto;
 const fmt = std.fmt;
@@ -36,6 +41,12 @@ pub const UUID = struct {
         uuid.bytes[6] = (uuid.bytes[6] & 0x0f) | 0x40;
         // Variant 1
         uuid.bytes[8] = (uuid.bytes[8] & 0x3f) | 0x80;
+        return uuid;
+    }
+
+    pub fn copy(self: UUID) UUID {
+        var uuid = UUID{ .bytes = undefined };
+        @memcpy(&uuid.bytes, &self.bytes);
         return uuid;
     }
 

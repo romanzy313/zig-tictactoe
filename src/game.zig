@@ -56,7 +56,7 @@ pub fn CoreGameGeneric(
         // need to old the type here, comptile time only
         ptr_publisher: *IPublisher,
         // gameId: UUID,
-        seqId: usize = 0, // for ordering of the events
+        seqId: u32 = 0, // for ordering of the events, not needed? I cant reference old events
 
         status: Status = .starting,
         players: [2]?AnyPlayerId = [2]?AnyPlayerId{ null, null }, // first player is x, second player is o
@@ -97,14 +97,6 @@ pub fn CoreGameGeneric(
             self.board.deinit(allocator);
         }
 
-        // maybe will be useful
-        pub fn getCurrentPlayerId(self: *CoreGame) AnyPlayerId {
-            // this should not be used until the same is initialized
-            assert(self.players[0] != null);
-            assert(self.players[1] != null);
-
-            return self.players[self.current_player].?;
-        }
         fn can_play(self: *CoreGame) bool {
             return self.status == .playing;
         }
@@ -403,19 +395,18 @@ test "common errors and errors" {
 // envelope stuff, wrapping one time, cant get it working...
 
 const TestPublisherEnvelope = struct {
-    values: std.BoundedArray(EventEnvelope, 100),
+    values: std.BoundedArray(EventEnvelope, 2),
 
     pub fn init() TestPublisherEnvelope {
         return .{
-            .values = std.BoundedArray(EventEnvelope, 100).init(0) catch unreachable,
+            .values = std.BoundedArray(EventEnvelope, 2){},
         };
     }
 
     pub fn publishEnvelope(self: *TestPublisherEnvelope, ev: EventEnvelope) void {
-        log.err("trying to publish event {any}", .{ev});
-        // log.err("self: {any}", .{self});
-        log.err("self len: {any}", .{self.values.len}); // len is segmentation fault...
+        log.warn("appending event event {any}", .{ev});
         self.values.append(ev) catch @panic("event overflow");
+        log.warn("after appen {any}", .{self.values.buffer[0]});
     }
 };
 
@@ -427,23 +418,25 @@ fn ScopedGameInstanceGeneric(
     return struct {
         const ScopedGameInstance = @This();
 
+        const GameType = CoreGameGeneric(is_server, ScopedGameInstance, ScopedGameInstance.publishEvent);
+
         ptr_publisher_envelope: *IPublisherEnvelope,
         game_id: UUID,
-        game: CoreGameGeneric(true, ScopedGameInstance, ScopedGameInstance.publishEvent),
+        game: GameType,
 
         pub fn init(
             ptr_publisher_envelope: *IPublisherEnvelope,
             game_id: UUID,
-            game: CoreGameGeneric(true, ScopedGameInstance, ScopedGameInstance.publishEvent),
         ) ScopedGameInstance {
-
-            CoreGameGeneric(true, ScopedGameInstance, ScopedGameInstance.publishEvent).init(allocator: Allocator, ptr_publisher: *IPublisher, events: []const Event)
-
             return ScopedGameInstance{
-              .ptr_publisher_envelope = ptr_publisher_envelope,
-              .game_id = game_id,
-              .game = game,
+                .ptr_publisher_envelope = ptr_publisher_envelope,
+                .game_id = game_id.copy(),
+                .game = undefined,
             };
+        }
+
+        pub fn initStage2(self: *ScopedGameInstance, allocator: Allocator, events: []const Event) !void {
+            self.game = try GameType.init(allocator, self, events);
         }
 
         // ptr_server: *GameServer,
@@ -454,10 +447,13 @@ fn ScopedGameInstanceGeneric(
 
             const envelope = EventEnvelope{
                 .gameId = self.game_id,
-                .seqId = 0,
+                .seqId = self.game.seqId, // HACKY HACK, REFACTOR NEEDED
                 .timestamp = timestamp,
                 .event = ev,
             };
+
+            log.err("emitting event with envelope {any}", .{envelope});
+
             if (is_server) {
                 // do something else!
             }
@@ -503,7 +499,7 @@ pub fn GameServerGeneric(
             return GameServer{
                 .allocator = allocator,
                 .ptr_publisher_envelope = ptr_publisher_envelope,
-                .instances = ArrayList(Instance).initCapacity(allocator, 30) catch @panic("OOM"),
+                .instances = ArrayList(Instance).init(allocator),
                 .lookup_map = std.AutoHashMap(UUID, usize).init(allocator),
             };
         }
@@ -519,25 +515,13 @@ pub fn GameServerGeneric(
 
         pub fn onEnvelope(self: *GameServer, envelope: EventEnvelope) void {
             if (self.getGameInstance(envelope.gameId)) |game_instance| {
-                log.warn("got game {any}", .{game_instance}); // pointer of publisher is lost...
-
                 game_instance.game.resolveEventSafe(envelope.event);
             }
         }
 
         pub fn newGame(self: *GameServer, id: UUID, events: []const Event) !void {
-            var internal_game_instance = Instance{
-                .game_id = id,
-                .ptr_publisher_envelope = self.ptr_publisher_envelope,
-                .game = try Instance.init(self.allocator, undefined, events),
-                // .game_id = id,
-                // .ptr_publisher_envelope = self.ptr_publisher_envelope,
-                // .game = try Instance.init(self.allocator, undefined, events),
-            };
-            // &internal_game_instance address not avaiable...
-            internal_game_instance.game.ptr_publisher = &internal_game_instance;
-
-            log.warn("the internal instance is {any}", .{internal_game_instance});
+            var internal_game_instance = Instance.init(self.ptr_publisher_envelope, id);
+            try internal_game_instance.initStage2(self.allocator, events);
 
             try self.instances.append(internal_game_instance);
             const index = self.instances.items.len - 1; // rough
@@ -555,7 +539,7 @@ pub fn GameServerGeneric(
 
         // The solution would be to just don’t store a pointer in the map.
         // Instead you can use map.getPtr to get a pointer to the list stored in the HashMap’s internal memory (you just need to be careful, because such a reference will become invalid after changing the hashmap).
-        fn getGameInstance(self: *GameServer, id: UUID) ?InternalGameInstance {
+        fn getGameInstance(self: *GameServer, id: UUID) ?*Instance {
             const maybe_index = self.lookup_map.get(id);
 
             if (maybe_index == null) {
@@ -565,7 +549,7 @@ pub fn GameServerGeneric(
             const index = maybe_index.?;
 
             // TODO: bounds checking
-            return self.instances.items[index];
+            return &self.instances.items[index];
         }
         fn hasGame(self: *GameServer, id: UUID) bool {
             return self.game_map.contains(id);
@@ -602,22 +586,38 @@ test "muliplexed game server" {
     // because the hashmap will need to grow and all values will be rehashed, therefore previous pointers wont work
     log.warn("CURRENT PLAYER!!!: {any}", .{server.getGameInstance(gameUUID).?.game.current_player});
     log.warn("CURRENT STATUS!!!: {any}", .{server.getGameInstance(gameUUID).?.game.status});
+    log.warn("CURRENT UUID!!!: {any}", .{server.getGameInstance(gameUUID).?.game_id});
+    try testing.expectEqual(server.getGameInstance(gameUUID).?.game_id.bytes, gameUUID.bytes); // sequence must be moved into "metadata", and timestamp as well... I think timestamp is pretty important too
 
     // outside the game_id is different...
     // they are like infinetely nested, as pointer to self is badly resolved... so what now?
     // accessing "game" yileds trash
     log.warn("OUTSIDE the internal instance from slice is {any}", .{server.instances.items[0].game});
 
-    // server.onEnvelope(.{
-    //     .gameId = gameUUID,
-    //     .timestamp = 55, //???
-    //     .seqId = 55, //???
-    //     .event = .{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } },
-    // });
+    server.onEnvelope(.{
+        .gameId = gameUUID,
+        .timestamp = 55, //??? not done in any shape or form
+        .seqId = 55, //???
+        .event = .{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } },
+    });
 
-    // try testing.expectEqual(server.getGameInstance(gameUUID).?.seqId, 3); // sequence must be moved into "metadata", and timestamp as well... I think timestamp is pretty important too
-    // try testing.expectEqual(server.getGameInstance(gameUUID).?.current_player, .o);
+    try testing.expectEqual(server.getGameInstance(gameUUID).?.game.seqId, 3); // sequence must be moved into "metadata", and timestamp as well... I think timestamp is pretty important too
+    try testing.expectEqual(server.getGameInstance(gameUUID).?.game.current_player, .o);
 
+    // now invalid move
+    server.onEnvelope(.{
+        .gameId = gameUUID,
+        .timestamp = 55, //??? not done in any shape or form
+        .seqId = 55, //???
+        .event = .{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } },
+    });
+
+    log.warn("BUFFER IS {any}", .{publisher.values.buffer});
+
+    // oh there were no sent events!
+    try testing.expectEqual(error.WrongSide, publisher.values.buffer[0].event.__runtimeError);
+    try testing.expectEqual(gameUUID.bytes, publisher.values.buffer[0].gameId.bytes);
+    try testing.expectEqual(100, publisher.values.buffer[0].timestamp); // hardcoded
     // log.warn("game_map {any}", .{server.game_map});
 
     // errornious event is sent
