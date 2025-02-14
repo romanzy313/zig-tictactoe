@@ -50,7 +50,7 @@ pub const AnyPlayerId = union(enum(u1)) {
 pub fn CoreGameGeneric(
     comptime is_server: bool, // can this be comptiletime known?
     comptime IPublisher: type,
-    comptime publishEvent: *const fn (T: *IPublisher, ev: Event) void,
+    comptime publishEvent: *const fn (T: *IPublisher, ev: Event) void, // instead implement the publishEnvelope... I guess this will need to keep track of
 ) type {
     return struct {
         // need to old the type here, comptile time only
@@ -419,6 +419,55 @@ const TestPublisherEnvelope = struct {
     }
 };
 
+fn ScopedGameInstanceGeneric(
+    comptime is_server: bool,
+    comptime IPublisherEnvelope: type,
+    comptime publishEnvelope: *const fn (T: *IPublisherEnvelope, ev: EventEnvelope) void,
+) type {
+    return struct {
+        const ScopedGameInstance = @This();
+
+        ptr_publisher_envelope: *IPublisherEnvelope,
+        game_id: UUID,
+        game: CoreGameGeneric(true, ScopedGameInstance, ScopedGameInstance.publishEvent),
+
+        pub fn init(
+            ptr_publisher_envelope: *IPublisherEnvelope,
+            game_id: UUID,
+            game: CoreGameGeneric(true, ScopedGameInstance, ScopedGameInstance.publishEvent),
+        ) ScopedGameInstance {
+
+            CoreGameGeneric(true, ScopedGameInstance, ScopedGameInstance.publishEvent).init(allocator: Allocator, ptr_publisher: *IPublisher, events: []const Event)
+
+            return ScopedGameInstance{
+              .ptr_publisher_envelope = ptr_publisher_envelope,
+              .game_id = game_id,
+              .game = game,
+            };
+        }
+
+        // ptr_server: *GameServer,
+        // game_idx: usize, // so that I can look it up before sening it?
+        pub fn publishEvent(self: *ScopedGameInstance, ev: Event) void {
+            // const timestamp: u64 = @intCast(std.time.milliTimestamp());
+            const timestamp: u64 = 100;
+
+            const envelope = EventEnvelope{
+                .gameId = self.game_id,
+                .seqId = 0,
+                .timestamp = timestamp,
+                .event = ev,
+            };
+            if (is_server) {
+                // do something else!
+            }
+
+            // double pointer lookup fails when the game tries to publish
+            publishEnvelope(self.ptr_publisher_envelope, envelope); // double pointer lookup!
+        }
+    };
+}
+
 // holds many games in the map
 // and it converts the events into their envelopes?
 pub fn GameServerGeneric(
@@ -434,36 +483,16 @@ pub fn GameServerGeneric(
         // the publish event needs to know what is the game id for proper routing
         // otherwise we just call the same function on all
         // so i need to wrap that, and return publishEvent function with a different pointer for each game?
-        const CoreGame = CoreGameGeneric(
+        const Instance = ScopedGameInstanceGeneric(
             is_server,
-            InternalGameInstance,
-            InternalGameInstance.publishEvent,
+            IPublisherEnvelope,
+            publishEnvelope,
         );
-        const InternalGameInstance = struct {
-            ptr_publisher_envelope: *IPublisherEnvelope,
-            game_id: UUID,
-            game: CoreGame,
-            // ptr_server: *GameServer,
-            // game_idx: usize, // so that I can look it up before sening it?
-            pub fn publishEvent(self: *InternalGameInstance, ev: Event) void {
-                // const timestamp: u64 = @intCast(std.time.milliTimestamp());
-                const timestamp: u64 = 100;
-
-                const envelope = EventEnvelope{
-                    .gameId = self.game_id,
-                    .seqId = 0,
-                    .timestamp = timestamp,
-                    .event = ev,
-                };
-                // double pointer lookup fails when the game tries to publish
-                publishEnvelope(self.ptr_publisher_envelope, envelope); // double pointer lookup!
-            }
-        };
 
         allocator: Allocator,
         ptr_publisher_envelope: *IPublisherEnvelope,
 
-        instances: ArrayList(InternalGameInstance), // all core games are stored on here, with extra "busy flag". maximum amount of games can be set here
+        instances: ArrayList(Instance), // all core games are stored on here, with extra "busy flag". maximum amount of games can be set here
         // the game_map references an instance
         lookup_map: std.AutoHashMap(UUID, usize), //this links uuid to instance id
 
@@ -474,7 +503,7 @@ pub fn GameServerGeneric(
             return GameServer{
                 .allocator = allocator,
                 .ptr_publisher_envelope = ptr_publisher_envelope,
-                .instances = ArrayList(InternalGameInstance).initCapacity(allocator, 30) catch @panic("OOM"),
+                .instances = ArrayList(Instance).initCapacity(allocator, 30) catch @panic("OOM"),
                 .lookup_map = std.AutoHashMap(UUID, usize).init(allocator),
             };
         }
@@ -497,39 +526,13 @@ pub fn GameServerGeneric(
         }
 
         pub fn newGame(self: *GameServer, id: UUID, events: []const Event) !void {
-            // its wierd that envelope wrapper is not "saved anywhere"
-            // its kind of like a closure with static data
-            //
-            // this must be staying in the map! I think this leaks?
-            // var envelope = GameInstance{
-            //     // .ptr_publisher = self.ptr_publisher,
-            //     .ptr_server = self,
-            //     .gameId = id,
-            //     .seqId = 0,
-            //     .game = undefined, // it depends on self
-            // };
-            // // the game must be const!
-            // const game = CoreGame.init(self.allocator, &envelope, events) catch |err| {
-            //     // how to communicate this?
-            //     log.warn("failed to init new game: {any}\n", .{err});
-            //     // i must return an error?
-            //     return error.FailedToInitNewGame;
-            // };
-            // envelope.game = game; // maybe this moneying fucks this up, as pointers are locally scoped or smth?
-
-            // var internal_game_instance = InternalGameInstance{
-            //     .game_id = id,
-            //     .ptr_publisher_envelope = self.ptr_publisher_envelope,
-            //     .game = undefined,
-            // };
-            // // &internal_game_instance address not avaiable...
-            // var core_game = try CoreGame.init(self.allocator, &internal_game_instance, events);
-            // internal_game_instance.game = &core_game;
-
-            var internal_game_instance = InternalGameInstance{
+            var internal_game_instance = Instance{
                 .game_id = id,
                 .ptr_publisher_envelope = self.ptr_publisher_envelope,
-                .game = try CoreGame.init(self.allocator, undefined, events),
+                .game = try Instance.init(self.allocator, undefined, events),
+                // .game_id = id,
+                // .ptr_publisher_envelope = self.ptr_publisher_envelope,
+                // .game = try Instance.init(self.allocator, undefined, events),
             };
             // &internal_game_instance address not avaiable...
             internal_game_instance.game.ptr_publisher = &internal_game_instance;
