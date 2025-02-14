@@ -6,7 +6,8 @@ const ArrayList = std.ArrayList;
 
 const Board = @import("Board.zig");
 const Ai = @import("Ai.zig");
-const GameEvent = @import("events.zig").GameEvent;
+const Event = @import("events.zig").Event;
+const EventEnvelope = @import("events.zig").EventEnvelope;
 
 pub const Status = enum {
     // TODO: add idle
@@ -44,10 +45,12 @@ pub const AnyPlayerId = union(enum(u1)) {
     // if first bit is 0 -> its a uuid, otherwise its an ai
 };
 
-pub fn CoreGameServer(
+// FIXME: the game projection must store its own allocator
+// there is basically an allocator per-game. and not the shared one, or shared one for now.
+pub fn CoreGameProjection(
     comptime is_server: bool, // can this be comptiletime known?
     comptime Iface: type,
-    comptime publishEvent: *const fn (T: *Iface, ev: GameEvent) void,
+    comptime publishEvent: *const fn (T: *Iface, ev: Event) void,
 ) type {
     return struct {
         // need to old the type here, comptile time only
@@ -61,29 +64,8 @@ pub fn CoreGameServer(
 
         const Self = @This();
 
-        // maybe will be useful
-        pub fn getCurrentPlayerId(self: *Self) AnyPlayerId {
-            // this should not be used until the same is initialized
-            assert(self.players[0] != null);
-            assert(self.players[1] != null);
-
-            return self.players[self.current_player].?;
-        }
-        fn can_play(self: *Self) bool {
-            return self.status == .playing;
-        }
-
-        // to avoid constant board.?, we force first event to be available on creation
-        fn initInternal(alloc: Allocator, ptr: *Iface, gameCreatedEvent: GameEvent.GameCreated) !Self {
-            const board = try Board.initEmpty(alloc, gameCreatedEvent.boardSize);
-            return .{
-                .ptr = ptr,
-                .board = board,
-            };
-        }
-
         // should events be owned slice (aka []const event.Event?)
-        pub fn init(allocator: Allocator, ptr: *Iface, events: []const GameEvent) !Self {
+        pub fn init(allocator: Allocator, ptr: *Iface, events: []const Event) !Self {
             if (events.len == 0) {
                 return error.BadEventCount;
             }
@@ -100,11 +82,32 @@ pub fn CoreGameServer(
             return self;
         }
 
+        // to avoid constant board.?, we force first event to be available on creation
+        fn initInternal(alloc: Allocator, ptr: *Iface, gameCreatedEvent: Event.GameCreated) !Self {
+            const board = try Board.initEmpty(alloc, gameCreatedEvent.boardSize);
+            return .{
+                .ptr = ptr,
+                .board = board,
+            };
+        }
+
         pub fn deinit(self: *Self, allocator: Allocator) void {
             self.board.deinit(allocator);
         }
 
-        pub fn resolveEventSafe(self: *Self, ev: GameEvent) void {
+        // maybe will be useful
+        pub fn getCurrentPlayerId(self: *Self) AnyPlayerId {
+            // this should not be used until the same is initialized
+            assert(self.players[0] != null);
+            assert(self.players[1] != null);
+
+            return self.players[self.current_player].?;
+        }
+        fn can_play(self: *Self) bool {
+            return self.status == .playing;
+        }
+
+        pub fn resolveEventSafe(self: *Self, ev: Event) void {
             // for example, wrap it up and send through
             // the ui will have to react to these errors
             // and they are not processed by all the clients
@@ -113,7 +116,7 @@ pub fn CoreGameServer(
             };
         }
 
-        fn resolveEvent(self: *Self, ev: GameEvent) !void {
+        fn resolveEvent(self: *Self, ev: Event) !void {
             // hmm, sequence here must be provided, so that we can validate, basically include some data from the envelope
             // things such as timestamps, but thouse are part of the game, so they should included with the moves. so only meta is sequenceId
             // but cant sequenceIds be resolved upstream?
@@ -179,7 +182,7 @@ pub fn CoreGameServer(
             self.seqId += 1;
         }
 
-        fn handleMoveMadeEvent(self: *Self, ev: GameEvent.MoveMade) !Status {
+        fn handleMoveMadeEvent(self: *Self, ev: Event.MoveMade) !Status {
             if (self.status != .playing) {
                 return error.GameFinished;
             }
@@ -226,46 +229,161 @@ pub fn CoreGameServer(
     };
 }
 
+const log = std.log.scoped(.game_server);
+
+// i publisher needs to be implemented to redirect events on self (in local play)
+//
+
+// holds many games in the map
+// and it converts the events into their envelopes?
+pub fn GameServer(
+    comptime is_server: bool, // can this be comptiletime known?
+    comptime IPublisher: type,
+    comptime publishEnvelope: *const fn (T: *IPublisher, ev: EventEnvelope) void,
+    // serializeEvent anyone? Using an envelope, probably on the same IFace?
+) type {
+    return struct {
+        // the publish event needs to know what is the game id for proper routing
+        // otherwise we just call the same function on all
+        // so i need to wrap that, and return publishEvent function with a different pointer for each game?
+        const GameProjection = CoreGameProjection(
+            is_server,
+            EnvelopeWrapper,
+            EnvelopeWrapper.publishEvent,
+        );
+
+        allocator: Allocator,
+        ptr_publisher: *IPublisher,
+        game_map: std.AutoHashMap(UUID, GameProjection),
+
+        const Self = @This();
+
+        // here we implement all these things, and keep game interface
+        pub fn init(allocator: Allocator, ptr_publisher: *IPublisher) Self {
+            return .{
+                .allocator = allocator,
+                .ptr_publisher = ptr_publisher,
+                .game_map = std.AutoHashMap(UUID, GameProjection).init(allocator),
+            };
+        }
+        pub fn deinit(self: *Self) void {
+            // shutdown, clean everything up
+            var it = self.game_map.valueIterator();
+            while (it.next()) |game| {
+                game.deinit(self.allocator); // maybe every game should store its own allocator? that seems reasonable!
+            }
+            self.game_map.deinit();
+        }
+        // envelope wrapper here!
+        const EnvelopeWrapper = struct {
+            ptr_server: *Self,
+            gameId: UUID,
+            seqId: u32 = 0, // this is not doing well, as game starts with event 0. maybe it starts with event 1, in order to signify nullity of the situation
+
+            // function to expose the
+            pub fn publishEvent(self: *EnvelopeWrapper, ev: Event) void {
+
+                // can do hasGame...
+                if (self.ptr_server.getGame(self.gameId)) |game| {
+                    _ = game; // not used for now, but some data could be useful
+
+                    const timestamp: u64 = @intCast(std.time.milliTimestamp());
+
+                    const envelope = EventEnvelope{
+                        .gameId = self.gameId,
+                        .seqId = self.seqId,
+                        .timestamp = timestamp,
+                        .event = ev,
+                    };
+                    self.seqId += 1;
+                    publishEnvelope(self.ptr_server.ptr_publisher, envelope); // double pointer lookup!
+                }
+            }
+        };
+
+        pub fn onEnvelope(self: *Self, envelope: EventEnvelope) void {
+            if (self.getGame(envelope.gameId)) |game| {
+                game.resolveEventSafe(envelope.event);
+            }
+        }
+
+        pub fn newGame(self: *Self, id: UUID, events: []const Event) !*GameProjection {
+            // its wierd that envelope wrapper is not "saved anywhere"
+            // its kind of like a closure with static data
+            var envelope = EnvelopeWrapper{
+                .gameId = id,
+                .ptr_server = self,
+                .seqId = 0,
+            };
+
+            // allocator is passed in!
+            var game = GameProjection.init(self.allocator, &envelope, events) catch |err| {
+                // how to communicate this?
+                log.warn("failed to init new game: {any}\n", .{err});
+                // i must return an error?
+                return error.FailedToInitNewGame;
+            };
+
+            try self.game_map.put(id, game);
+            return &game;
+        }
+
+        fn getGame(self: *Self, id: UUID) ?*GameProjection {
+            const maybe_game = self.game_map.getPtr(id);
+
+            if (maybe_game == null) {
+                log.warn("[getGame]: game with uuid {s} not found", .{id});
+                return null; // explicit
+            }
+
+            return maybe_game.?;
+        }
+        fn hasGame(self: *Self, id: UUID) bool {
+            return self.game_map.contains(id);
+        }
+    };
+}
+
 // tests
 
 const testing = std.testing;
 
 const TestIntegration = struct {
-    values: std.BoundedArray(GameEvent, 10),
+    values: std.BoundedArray(Event, 10),
 
     pub fn init() TestIntegration {
         return .{
-            .values = std.BoundedArray(GameEvent, 10){},
+            .values = std.BoundedArray(Event, 10){},
         };
     }
 
-    pub fn publishEvent(self: *@This(), ev: GameEvent) void {
+    pub fn publishEvent(self: *@This(), ev: Event) void {
         self.values.append(ev) catch @panic("event overflow");
     }
 };
-const test_joinHumanX = GameEvent.PlayerJoined{
+const test_joinHumanX = Event.PlayerJoined{
     .playerId = .{ .human = UUID.initFromNumber(0) },
     .side = .x,
 };
-const test_joinHumanO = GameEvent.PlayerJoined{
+const test_joinHumanO = Event.PlayerJoined{
     .playerId = .{ .human = UUID.initFromNumber(1) },
     .side = .o,
 };
-const test_joinAiX = GameEvent.PlayerJoined{
+const test_joinAiX = Event.PlayerJoined{
     .playerId = .{ .ai = .easy },
     .side = .x,
 };
-const test_joinAiO = GameEvent.PlayerJoined{
+const test_joinAiO = Event.PlayerJoined{
     .playerId = .{ .ai = .easy },
     .side = .o,
 };
 
 test "grid init" {
     var eventer = TestIntegration.init();
-    var game = try CoreGameServer(true, TestIntegration, TestIntegration.publishEvent).init(
+    var game = try CoreGameProjection(true, TestIntegration, TestIntegration.publishEvent).init(
         testing.allocator,
         &eventer,
-        &[_]GameEvent{
+        &[_]Event{
             .{
                 .gameCreated = .{
                     .boardSize = 3,
@@ -285,10 +403,10 @@ test "grid init" {
 
 test "make move" {
     var eventer = TestIntegration.init();
-    var game = try CoreGameServer(true, TestIntegration, TestIntegration.publishEvent).init(
+    var game = try CoreGameProjection(true, TestIntegration, TestIntegration.publishEvent).init(
         testing.allocator,
         &eventer,
-        &[_]GameEvent{
+        &[_]Event{
             .{ .gameCreated = .{
                 .boardSize = 3,
                 .gameId = UUID.init(),
@@ -322,10 +440,10 @@ test "make move" {
 
 test "common errors and errors" {
     var eventer = TestIntegration.init();
-    var game = try CoreGameServer(true, TestIntegration, TestIntegration.publishEvent).init(
+    var game = try CoreGameProjection(true, TestIntegration, TestIntegration.publishEvent).init(
         testing.allocator,
         &eventer,
-        &[_]GameEvent{
+        &[_]Event{
             .{ .gameCreated = .{
                 .boardSize = 3,
                 .gameId = UUID.initFromNumber(0),
@@ -338,7 +456,7 @@ test "common errors and errors" {
     game.resolveEventSafe(.{
         .moveMade = .{ .side = .x, .position = .{ .x = 0, .y = 0 } },
     });
-    try testing.expectEqual(eventer.values.buffer[0], GameEvent{ .__runtimeError = error.CantPlayYet }); // all these need refactoring
+    try testing.expectEqual(eventer.values.buffer[0], Event{ .__runtimeError = error.CantPlayYet }); // all these need refactoring
 
     // cant move as only one player joined
     game.resolveEventSafe(.{
@@ -347,13 +465,13 @@ test "common errors and errors" {
     game.resolveEventSafe(.{
         .moveMade = .{ .side = .x, .position = .{ .x = 0, .y = 0 } },
     });
-    try testing.expectEqual(eventer.values.buffer[1], GameEvent{ .__runtimeError = error.CantPlayYet }); // all these need refactoring
+    try testing.expectEqual(eventer.values.buffer[1], Event{ .__runtimeError = error.CantPlayYet }); // all these need refactoring
 
     // cant join to already taken side
     game.resolveEventSafe(.{
         .playerJoined = .{ .playerId = .{ .human = UUID.init() }, .side = .x },
     });
-    try testing.expectEqual(eventer.values.buffer[2], GameEvent{ .__runtimeError = error.PlayerOfThisSideAleadyJoined }); // all these need refactoring
+    try testing.expectEqual(eventer.values.buffer[2], Event{ .__runtimeError = error.PlayerOfThisSideAleadyJoined }); // all these need refactoring
 
     // cant play for the other side
     game.resolveEventSafe(.{
@@ -362,7 +480,7 @@ test "common errors and errors" {
     game.resolveEventSafe(.{
         .moveMade = .{ .side = .o, .position = .{ .x = 0, .y = 0 } },
     });
-    try testing.expectEqual(eventer.values.buffer[3], GameEvent{ .__runtimeError = error.WrongSide }); // all these need refactoring
+    try testing.expectEqual(eventer.values.buffer[3], Event{ .__runtimeError = error.WrongSide }); // all these need refactoring
 
     //  cant play on occupied square
     game.resolveEventSafe(.{
@@ -371,7 +489,7 @@ test "common errors and errors" {
     game.resolveEventSafe(.{
         .moveMade = .{ .side = .o, .position = .{ .x = 0, .y = 0 } },
     });
-    try testing.expectEqual(eventer.values.buffer[4], GameEvent{ .__runtimeError = error.CannotSelectAlreadySelected }); // all these need refactoring
+    try testing.expectEqual(eventer.values.buffer[4], Event{ .__runtimeError = error.CannotSelectAlreadySelected }); // all these need refactoring
 
     // play till win
     game.resolveEventSafe(.{
@@ -387,5 +505,53 @@ test "common errors and errors" {
         .moveMade = .{ .side = .x, .position = .{ .x = 0, .y = 2 } },
     });
     // expect a gameFinished event
-    try testing.expectEqual(eventer.values.buffer[5], GameEvent{ .gameFinished = .{ .outcome = .xWon } }); // all these need refactoring
+    try testing.expectEqual(eventer.values.buffer[5], Event{ .gameFinished = .{ .outcome = .xWon } }); // all these need refactoring
+}
+
+const TestPublisherEnvelope = struct {
+    values: std.BoundedArray(EventEnvelope, 10),
+
+    pub fn init() TestPublisherEnvelope {
+        return .{
+            .values = std.BoundedArray(EventEnvelope, 10){},
+        };
+    }
+
+    pub fn publishEnvelope(self: *@This(), ev: EventEnvelope) void {
+        self.values.append(ev) catch @panic("event overflow");
+    }
+};
+
+test "muliplexed game server" {
+    var publisher = TestPublisherEnvelope.init();
+    var server = GameServer(
+        true,
+        TestPublisherEnvelope,
+        TestPublisherEnvelope.publishEnvelope,
+    ).init(testing.allocator, &publisher);
+    defer server.deinit();
+
+    const gameUUID = UUID.initFromNumber(10);
+
+    _ = try server.newGame(
+        gameUUID,
+        &[_]Event{
+            .{ .gameCreated = .{
+                .boardSize = 3,
+                .gameId = UUID.initFromNumber(0),
+            } },
+            .{ .playerJoined = test_joinHumanX }, // these must be emitted though a wrapper though
+            .{ .playerJoined = test_joinHumanO },
+        },
+    );
+
+    server.onEnvelope(.{
+        .gameId = gameUUID,
+        .timestamp = 0, //???
+        .seqId = 0, //???
+        .event = .{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } },
+    });
+
+    try testing.expectEqual(server.getGame(gameUUID).?.seqId, 3); // sequence must be moved into "metadata"
+    try testing.expectEqual(server.getGame(gameUUID).?.current_player, .o);
 }

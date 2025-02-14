@@ -5,14 +5,25 @@ const Ai = @import("Ai.zig");
 const UUID = @import("uuid").UUID;
 
 // this is an envelope when data is being sent to the server
-pub const EventWithEnvelope = struct {
+pub const EventEnvelope = struct {
     gameId: UUID, // mandatory, even in offline play... would be nice to implement ULID: Lexicographically sortable kind
     seqId: u32,
     timestamp: u64, // ideally should be a string thats json encodable
-    data: GameEvent,
+    event: Event,
+
+    pub fn init(gameId: UUID, seqId: u32, timestamp: u64, data: Event) EventEnvelope {
+        return .{
+            .gameId = gameId,
+            .seqId = seqId,
+            .timestamp = timestamp,
+            .data = data,
+        };
+    }
+
+    // toBin and fromBin must be implemented on this
 };
 
-pub const GameEvent = union(enum) {
+pub const Event = union(enum) {
     gameCreated: GameCreated,
     playerJoined: PlayerJoined,
     moveMade: MoveMade,
