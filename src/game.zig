@@ -55,7 +55,9 @@ pub fn CoreGameGeneric(
     return struct {
         // need to old the type here, comptile time only
         ptr_publisher: *IPublisher,
+        // gameId: UUID,
         seqId: usize = 0, // for ordering of the events
+
         status: Status = .starting,
         players: [2]?AnyPlayerId = [2]?AnyPlayerId{ null, null }, // first player is x, second player is o
         current_player: PlayerSide = .x,
@@ -85,7 +87,7 @@ pub fn CoreGameGeneric(
         // to avoid constant board.?, we force first event to be available on creation
         fn initInternal(alloc: Allocator, ptr_publisher: *IPublisher, gameCreatedEvent: Event.GameCreated) !CoreGame {
             const board = try Board.initEmpty(alloc, gameCreatedEvent.boardSize);
-            return .{
+            return CoreGame{
                 .ptr_publisher = ptr_publisher,
                 .board = board,
             };
@@ -233,171 +235,6 @@ const log = std.log.scoped(.game_server);
 
 // i publisher needs to be implemented to redirect events on self (in local play)
 //
-
-// holds many games in the map
-// and it converts the events into their envelopes?
-pub fn GameServerGeneric(
-    comptime is_server: bool, // can this be comptiletime known?
-    comptime IPublisher: type,
-    comptime publishEnvelope: *const fn (T: *IPublisher, ev: EventEnvelope) void,
-    // serializeEvent anyone? Using an envelope, probably on the same IFace?
-) type {
-    return struct {
-        // the publish event needs to know what is the game id for proper routing
-        // otherwise we just call the same function on all
-        // so i need to wrap that, and return publishEvent function with a different pointer for each game?
-        const CoreGame = CoreGameGeneric(
-            is_server,
-            GameInstance,
-            GameInstance.publishEvent,
-        );
-        const GameInstance = struct {
-            ptr_server: *const GameServer, // maybe this needs to be constant pointer... technically it never changes!
-            // ptr_publisher: *IPublisher,
-            gameId: UUID,
-            game: CoreGame, // pointers get chewed... what is self in this game?
-            seqId: u32 = 0, // this is not doing well, as game starts with event 0. maybe it starts with event 1, in order to signify nullity of the situation
-
-            pub fn init(ptr_server: *const GameServer, gameId: UUID, game: CoreGame) GameInstance {
-                return .{
-                    .ptr_server = ptr_server,
-                    .gameId = gameId,
-                    .game = game,
-                };
-            }
-
-            // function which the game calls. here need to have extra metadata to route it properly
-            // timstamps and sequenceIds are part of metadata
-            pub fn publishEvent(self: *GameInstance, ev: Event) void {
-
-                // can do hasGame...
-
-                // log.err("self: {*}, server: {*}, publisher: {*}", .{ self, self.ptr_server, self.ptr_server.ptr_publisher });
-                log.err("self: {*}, server: {*}", .{ self, self.ptr_server });
-
-                log.err("instance count {d}", .{self.ptr_server.*.instances.items.len});
-
-                const ptr_publisher = self.ptr_server.*.ptr_publisher;
-
-                const timestamp: u64 = @intCast(std.time.milliTimestamp());
-
-                const envelope = EventEnvelope{
-                    .gameId = self.gameId,
-                    .seqId = self.seqId,
-                    .timestamp = timestamp,
-                    .event = ev,
-                };
-                self.seqId += 1;
-                // double pointer lookup fails when the game tries to publish
-                publishEnvelope(ptr_publisher, envelope); // double pointer lookup!
-            }
-        };
-
-        allocator: Allocator,
-        ptr_publisher: *IPublisher,
-
-        instances: ArrayList(GameInstance), // all core games are stored on here, with extra "busy flag". maximum amount of games can be set here
-        // the game_map references an instance
-        lookup_map: std.AutoHashMap(UUID, usize), //this links uuid to instance id
-
-        const GameServer = @This();
-
-        // here we implement all these things, and keep game interface
-        pub fn init(allocator: Allocator, ptr_publisher: *IPublisher) GameServer {
-            return .{
-                .allocator = allocator,
-                .ptr_publisher = ptr_publisher,
-                .instances = ArrayList(GameInstance).init(allocator),
-                .lookup_map = std.AutoHashMap(UUID, usize).init(allocator),
-            };
-        }
-        pub fn deinit(self: *GameServer) void {
-            // shutdown, clean everything up
-            for (self.instances.items) |*game_instance| {
-                // i keep on loosing these pointers...
-                game_instance.game.deinit(self.allocator);
-            }
-            self.instances.deinit();
-            self.lookup_map.deinit();
-        }
-
-        pub fn onEnvelope(self: *GameServer, envelope: EventEnvelope) void {
-            if (self.getGameInstance(envelope.gameId)) |game_instance| {
-                log.warn("got game {any}", .{game_instance}); // pointer of publisher is lost...
-                game_instance.game.resolveEventSafe(envelope.event);
-            }
-        }
-
-        pub fn newGame(self: *GameServer, id: UUID, events: []const Event) !void {
-            // its wierd that envelope wrapper is not "saved anywhere"
-            // its kind of like a closure with static data
-            //
-            // this must be staying in the map! I think this leaks?
-            // var envelope = GameInstance{
-            //     // .ptr_publisher = self.ptr_publisher,
-            //     .ptr_server = self,
-            //     .gameId = id,
-            //     .seqId = 0,
-            //     .game = undefined, // it depends on self
-            // };
-            // // the game must be const!
-            // const game = CoreGame.init(self.allocator, &envelope, events) catch |err| {
-            //     // how to communicate this?
-            //     log.warn("failed to init new game: {any}\n", .{err});
-            //     // i must return an error?
-            //     return error.FailedToInitNewGame;
-            // };
-            // envelope.game = game; // maybe this moneying fucks this up, as pointers are locally scoped or smth?
-            var instance = GameInstance.init(
-                // .ptr_publisher = self.ptr_publisher,
-                self,
-                id,
-                // no pointer yet!
-                CoreGame.init(self.allocator, undefined, events) catch |err| {
-                    // how to communicate this?
-                    log.warn("failed to init new game: {any}\n", .{err});
-                    // i must return an error?
-                    return error.FailedToInitNewGame;
-                }, // it depends on self
-            );
-            // the game must be const!
-            instance.game.ptr_publisher = &instance; // maybe this moneying fucks this up, as pointers are locally scoped or smth?
-
-            // log.warn("game instance is {any}", .{envelope});
-
-            try self.instances.append(instance);
-            const index = self.instances.items.len - 1; // rough
-
-            try self.lookup_map.put(id, index);
-        }
-        // https://ziggit.dev/t/problem-with-hashmaps/7221
-        // var newList = std.ArrayList(Point).init(allocator);
-        // newList is a variable defined on the stack. It will be invalidated at the end of the scope.
-        // try map.put(key, &newList);
-        // Here you are taking a pointer to it and store it in the map.
-        // One line later the scope ends and the pointer points to invalid memory.
-
-        // The solution would be to just don’t store a pointer in the map.
-        // Instead you can use map.getPtr to get a pointer to the list stored in the HashMap’s internal memory (you just need to be careful, because such a reference will become invalid after changing the hashmap).
-        fn getGameInstance(self: *GameServer, id: UUID) ?*GameInstance {
-            const maybe_index = self.lookup_map.get(id);
-
-            if (maybe_index == null) {
-                log.warn("[getGame]: game with uuid {s} not found", .{id});
-                return null; // explicit
-            }
-            const index = maybe_index.?;
-
-            // TODO: bounds checking
-            var instance = self.instances.items[index];
-
-            return &instance;
-        }
-        fn hasGame(self: *GameServer, id: UUID) bool {
-            return self.game_map.contains(id);
-        }
-    };
-}
 
 // tests
 
@@ -563,6 +400,8 @@ test "common errors and errors" {
     try testing.expectEqual(eventer.values.buffer[5], Event{ .gameFinished = .{ .outcome = .xWon } }); // all these need refactoring
 }
 
+// envelope stuff, wrapping one time, cant get it working...
+
 const TestPublisherEnvelope = struct {
     values: std.BoundedArray(EventEnvelope, 100),
 
@@ -574,11 +413,162 @@ const TestPublisherEnvelope = struct {
 
     pub fn publishEnvelope(self: *TestPublisherEnvelope, ev: EventEnvelope) void {
         log.err("trying to publish event {any}", .{ev});
-        log.err("self: {any}", .{self});
+        // log.err("self: {any}", .{self});
         log.err("self len: {any}", .{self.values.len}); // len is segmentation fault...
         self.values.append(ev) catch @panic("event overflow");
     }
 };
+
+// holds many games in the map
+// and it converts the events into their envelopes?
+pub fn GameServerGeneric(
+    comptime is_server: bool, // can this be comptiletime known?
+    comptime IPublisherEnvelope: type,
+    comptime publishEnvelope: *const fn (T: *IPublisherEnvelope, ev: EventEnvelope) void,
+    // serializeEvent anyone? Using an envelope, probably on the same IFace?
+) type {
+
+    // I need a comptime function for IPublisher with Event as a thing...
+
+    return struct {
+        // the publish event needs to know what is the game id for proper routing
+        // otherwise we just call the same function on all
+        // so i need to wrap that, and return publishEvent function with a different pointer for each game?
+        const CoreGame = CoreGameGeneric(
+            is_server,
+            InternalGameInstance,
+            InternalGameInstance.publishEvent,
+        );
+        const InternalGameInstance = struct {
+            ptr_publisher_envelope: *IPublisherEnvelope,
+            game_id: UUID,
+            game: CoreGame,
+            // ptr_server: *GameServer,
+            // game_idx: usize, // so that I can look it up before sening it?
+            pub fn publishEvent(self: *InternalGameInstance, ev: Event) void {
+                // const timestamp: u64 = @intCast(std.time.milliTimestamp());
+                const timestamp: u64 = 100;
+
+                const envelope = EventEnvelope{
+                    .gameId = self.game_id,
+                    .seqId = 0,
+                    .timestamp = timestamp,
+                    .event = ev,
+                };
+                // double pointer lookup fails when the game tries to publish
+                publishEnvelope(self.ptr_publisher_envelope, envelope); // double pointer lookup!
+            }
+        };
+
+        allocator: Allocator,
+        ptr_publisher_envelope: *IPublisherEnvelope,
+
+        instances: ArrayList(InternalGameInstance), // all core games are stored on here, with extra "busy flag". maximum amount of games can be set here
+        // the game_map references an instance
+        lookup_map: std.AutoHashMap(UUID, usize), //this links uuid to instance id
+
+        const GameServer = @This();
+
+        // here we implement all these things, and keep game interface
+        pub fn init(allocator: Allocator, ptr_publisher_envelope: *IPublisherEnvelope) GameServer {
+            return GameServer{
+                .allocator = allocator,
+                .ptr_publisher_envelope = ptr_publisher_envelope,
+                .instances = ArrayList(InternalGameInstance).initCapacity(allocator, 30) catch @panic("OOM"),
+                .lookup_map = std.AutoHashMap(UUID, usize).init(allocator),
+            };
+        }
+        pub fn deinit(self: *GameServer) void {
+            // shutdown, clean everything up
+            for (self.instances.items) |*game_instance| {
+                // i keep on loosing these pointers...
+                game_instance.game.deinit(self.allocator);
+            }
+            self.instances.deinit();
+            self.lookup_map.deinit();
+        }
+
+        pub fn onEnvelope(self: *GameServer, envelope: EventEnvelope) void {
+            if (self.getGameInstance(envelope.gameId)) |game_instance| {
+                log.warn("got game {any}", .{game_instance}); // pointer of publisher is lost...
+
+                game_instance.game.resolveEventSafe(envelope.event);
+            }
+        }
+
+        pub fn newGame(self: *GameServer, id: UUID, events: []const Event) !void {
+            // its wierd that envelope wrapper is not "saved anywhere"
+            // its kind of like a closure with static data
+            //
+            // this must be staying in the map! I think this leaks?
+            // var envelope = GameInstance{
+            //     // .ptr_publisher = self.ptr_publisher,
+            //     .ptr_server = self,
+            //     .gameId = id,
+            //     .seqId = 0,
+            //     .game = undefined, // it depends on self
+            // };
+            // // the game must be const!
+            // const game = CoreGame.init(self.allocator, &envelope, events) catch |err| {
+            //     // how to communicate this?
+            //     log.warn("failed to init new game: {any}\n", .{err});
+            //     // i must return an error?
+            //     return error.FailedToInitNewGame;
+            // };
+            // envelope.game = game; // maybe this moneying fucks this up, as pointers are locally scoped or smth?
+
+            // var internal_game_instance = InternalGameInstance{
+            //     .game_id = id,
+            //     .ptr_publisher_envelope = self.ptr_publisher_envelope,
+            //     .game = undefined,
+            // };
+            // // &internal_game_instance address not avaiable...
+            // var core_game = try CoreGame.init(self.allocator, &internal_game_instance, events);
+            // internal_game_instance.game = &core_game;
+
+            var internal_game_instance = InternalGameInstance{
+                .game_id = id,
+                .ptr_publisher_envelope = self.ptr_publisher_envelope,
+                .game = try CoreGame.init(self.allocator, undefined, events),
+            };
+            // &internal_game_instance address not avaiable...
+            internal_game_instance.game.ptr_publisher = &internal_game_instance;
+
+            log.warn("the internal instance is {any}", .{internal_game_instance});
+
+            try self.instances.append(internal_game_instance);
+            const index = self.instances.items.len - 1; // rough
+
+            log.warn("the internal instance from slice is {any}", .{self.instances.items[0]});
+
+            try self.lookup_map.put(id, index);
+        }
+        // https://ziggit.dev/t/problem-with-hashmaps/7221
+        // var newList = std.ArrayList(Point).init(allocator);
+        // newList is a variable defined on the stack. It will be invalidated at the end of the scope.
+        // try map.put(key, &newList);
+        // Here you are taking a pointer to it and store it in the map.
+        // One line later the scope ends and the pointer points to invalid memory.
+
+        // The solution would be to just don’t store a pointer in the map.
+        // Instead you can use map.getPtr to get a pointer to the list stored in the HashMap’s internal memory (you just need to be careful, because such a reference will become invalid after changing the hashmap).
+        fn getGameInstance(self: *GameServer, id: UUID) ?InternalGameInstance {
+            const maybe_index = self.lookup_map.get(id);
+
+            if (maybe_index == null) {
+                log.warn("[getGame]: game with uuid {s} not found", .{id});
+                return null; // explicit
+            }
+            const index = maybe_index.?;
+
+            // TODO: bounds checking
+            return self.instances.items[index];
+        }
+        fn hasGame(self: *GameServer, id: UUID) bool {
+            return self.game_map.contains(id);
+        }
+    };
+}
 
 test "muliplexed game server" {
     var publisher = TestPublisherEnvelope.init();
@@ -608,13 +598,19 @@ test "muliplexed game server" {
     // these are both good. I cant hold on to pointers for long. As addition of new games will invalidate them
     // because the hashmap will need to grow and all values will be rehashed, therefore previous pointers wont work
     log.warn("CURRENT PLAYER!!!: {any}", .{server.getGameInstance(gameUUID).?.game.current_player});
+    log.warn("CURRENT STATUS!!!: {any}", .{server.getGameInstance(gameUUID).?.game.status});
 
-    server.onEnvelope(.{
-        .gameId = gameUUID,
-        .timestamp = 0, //???
-        .seqId = 0, //???
-        .event = .{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } },
-    });
+    // outside the game_id is different...
+    // they are like infinetely nested, as pointer to self is badly resolved... so what now?
+    // accessing "game" yileds trash
+    log.warn("OUTSIDE the internal instance from slice is {any}", .{server.instances.items[0].game});
+
+    // server.onEnvelope(.{
+    //     .gameId = gameUUID,
+    //     .timestamp = 55, //???
+    //     .seqId = 55, //???
+    //     .event = .{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } },
+    // });
 
     // try testing.expectEqual(server.getGameInstance(gameUUID).?.seqId, 3); // sequence must be moved into "metadata", and timestamp as well... I think timestamp is pretty important too
     // try testing.expectEqual(server.getGameInstance(gameUUID).?.current_player, .o);
