@@ -84,8 +84,6 @@ pub fn CoreGameServer(
 
         // should events be owned slice (aka []const event.Event?)
         pub fn init(allocator: Allocator, ptr: *Iface, events: []const GameEvent) !Self {
-            // const self = init(allocator)
-
             if (events.len == 0) {
                 return error.BadEventCount;
             }
@@ -229,7 +227,6 @@ pub fn CoreGameServer(
 }
 
 // tests
-//
 
 const testing = std.testing;
 
