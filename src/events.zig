@@ -40,6 +40,6 @@ pub const GameEvent = union(enum) {
         position: Board.CellPosition,
     };
     pub const GameFinished = struct {
-        winner: game.GameWinner,
+        outcome: game.GameOutcome,
     };
 };
