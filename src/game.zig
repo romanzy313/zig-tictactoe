@@ -49,12 +49,12 @@ pub const AnyPlayerId = union(enum(u1)) {
 // there is basically an allocator per-game. and not the shared one, or shared one for now.
 pub fn CoreGameProjection(
     comptime is_server: bool, // can this be comptiletime known?
-    comptime Iface: type,
-    comptime publishEvent: *const fn (T: *Iface, ev: Event) void,
+    comptime IPublisher: type,
+    comptime publishEvent: *const fn (T: *IPublisher, ev: Event) void,
 ) type {
     return struct {
         // need to old the type here, comptile time only
-        ptr: *Iface,
+        ptr: *IPublisher,
         seqId: usize = 0, // for ordering of the events
         status: Status = .starting,
         players: [2]?AnyPlayerId = [2]?AnyPlayerId{ null, null }, // first player is x, second player is o
@@ -65,7 +65,7 @@ pub fn CoreGameProjection(
         const Self = @This();
 
         // should events be owned slice (aka []const event.Event?)
-        pub fn init(allocator: Allocator, ptr: *Iface, events: []const Event) !Self {
+        pub fn init(allocator: Allocator, ptr: *IPublisher, events: []const Event) !Self {
             if (events.len == 0) {
                 return error.BadEventCount;
             }
@@ -83,7 +83,7 @@ pub fn CoreGameProjection(
         }
 
         // to avoid constant board.?, we force first event to be available on creation
-        fn initInternal(alloc: Allocator, ptr: *Iface, gameCreatedEvent: Event.GameCreated) !Self {
+        fn initInternal(alloc: Allocator, ptr: *IPublisher, gameCreatedEvent: Event.GameCreated) !Self {
             const board = try Board.initEmpty(alloc, gameCreatedEvent.boardSize);
             return .{
                 .ptr = ptr,
@@ -246,15 +246,23 @@ pub fn GameServer(
         // the publish event needs to know what is the game id for proper routing
         // otherwise we just call the same function on all
         // so i need to wrap that, and return publishEvent function with a different pointer for each game?
-        const GameProjection = CoreGameProjection(
+        const CoreGame = CoreGameProjection(
             is_server,
-            EnvelopeWrapper,
-            EnvelopeWrapper.publishEvent,
+            GameInstance,
+            GameInstance.publishEvent,
         );
+
+        // const InstancedCoreGame = struct {
+        //     busy: bool,
+        //     game: CoreGame,
+        // };
+        // instances: ArrayList(CoreGame), // all core games are stored on here, with extra "busy flag". maximum amount of games can be set here
 
         allocator: Allocator,
         ptr_publisher: *IPublisher,
-        game_map: std.AutoHashMap(UUID, GameProjection),
+
+        // the game_map references an instance
+        game_map: std.AutoHashMap(UUID, GameInstance), //can do a better context for uuid
 
         const Self = @This();
 
@@ -263,41 +271,42 @@ pub fn GameServer(
             return .{
                 .allocator = allocator,
                 .ptr_publisher = ptr_publisher,
-                .game_map = std.AutoHashMap(UUID, GameProjection).init(allocator),
+                .game_map = std.AutoHashMap(UUID, GameInstance).init(allocator),
             };
         }
         pub fn deinit(self: *Self) void {
             // shutdown, clean everything up
             var it = self.game_map.valueIterator();
-            while (it.next()) |game| {
-                game.deinit(self.allocator); // maybe every game should store its own allocator? that seems reasonable!
+            while (it.next()) |envelope| {
+                envelope.game.deinit(self.allocator); // maybe every game should store its own allocator? that seems reasonable!
             }
             self.game_map.deinit();
         }
         // envelope wrapper here!
-        const EnvelopeWrapper = struct {
-            ptr_server: *Self,
+        const GameInstance = struct {
+            // ptr_server: *Self,
+            ptr_publisher: *IPublisher,
             gameId: UUID,
             seqId: u32 = 0, // this is not doing well, as game starts with event 0. maybe it starts with event 1, in order to signify nullity of the situation
+            game: CoreGame, // pointers get chewed... what is self in this game?
 
-            // function to expose the
-            pub fn publishEvent(self: *EnvelopeWrapper, ev: Event) void {
+            // function which the game calls. here need to have extra metadata to route it properly
+            // timstamps and sequenceIds are part of metadata
+            pub fn publishEvent(self: *GameInstance, ev: Event) void {
 
                 // can do hasGame...
-                if (self.ptr_server.getGame(self.gameId)) |game| {
-                    _ = game; // not used for now, but some data could be useful
 
-                    const timestamp: u64 = @intCast(std.time.milliTimestamp());
+                const timestamp: u64 = @intCast(std.time.milliTimestamp());
 
-                    const envelope = EventEnvelope{
-                        .gameId = self.gameId,
-                        .seqId = self.seqId,
-                        .timestamp = timestamp,
-                        .event = ev,
-                    };
-                    self.seqId += 1;
-                    publishEnvelope(self.ptr_server.ptr_publisher, envelope); // double pointer lookup!
-                }
+                const envelope = EventEnvelope{
+                    .gameId = self.gameId,
+                    .seqId = self.seqId,
+                    .timestamp = timestamp,
+                    .event = ev,
+                };
+                self.seqId += 1;
+                // double pointer lookup fails when the game tries to publish
+                publishEnvelope(self.ptr_publisher, envelope); // double pointer lookup!
             }
         };
 
@@ -307,36 +316,41 @@ pub fn GameServer(
             }
         }
 
-        pub fn newGame(self: *Self, id: UUID, events: []const Event) !*GameProjection {
+        pub fn newGame(self: *Self, id: UUID, events: []const Event) !void {
             // its wierd that envelope wrapper is not "saved anywhere"
             // its kind of like a closure with static data
-            var envelope = EnvelopeWrapper{
+            //
+            // this must be staying in the map! I think this leaks?
+            var envelope = GameInstance{
+                .ptr_publisher = self.ptr_publisher,
                 .gameId = id,
-                .ptr_server = self,
                 .seqId = 0,
+                .game = undefined, // it depends on self
             };
-
-            // allocator is passed in!
-            var game = GameProjection.init(self.allocator, &envelope, events) catch |err| {
+            // the game must be const!
+            var game = CoreGame.init(self.allocator, &envelope, events) catch |err| {
                 // how to communicate this?
                 log.warn("failed to init new game: {any}\n", .{err});
                 // i must return an error?
                 return error.FailedToInitNewGame;
             };
+            envelope.game = game; // *const
 
-            try self.game_map.put(id, game);
-            return &game;
+            game.seqId = 0; // force mutate
+            log.warn("game instance is {any}", .{envelope});
+
+            try self.game_map.put(id, envelope);
         }
 
-        fn getGame(self: *Self, id: UUID) ?*GameProjection {
-            const maybe_game = self.game_map.getPtr(id);
+        fn getGame(self: *Self, id: UUID) ?*CoreGame {
+            const maybe_envelope = self.game_map.get(id);
 
-            if (maybe_game == null) {
+            if (maybe_envelope == null) {
                 log.warn("[getGame]: game with uuid {s} not found", .{id});
                 return null; // explicit
             }
-
-            return maybe_game.?;
+            const game = &maybe_envelope.?.game;
+            return game;
         }
         fn hasGame(self: *Self, id: UUID) bool {
             return self.game_map.contains(id);
@@ -509,15 +523,18 @@ test "common errors and errors" {
 }
 
 const TestPublisherEnvelope = struct {
-    values: std.BoundedArray(EventEnvelope, 10),
+    values: std.BoundedArray(EventEnvelope, 100),
 
     pub fn init() TestPublisherEnvelope {
         return .{
-            .values = std.BoundedArray(EventEnvelope, 10){},
+            .values = std.BoundedArray(EventEnvelope, 100).init(0) catch unreachable,
         };
     }
 
-    pub fn publishEnvelope(self: *@This(), ev: EventEnvelope) void {
+    pub fn publishEnvelope(self: *TestPublisherEnvelope, ev: EventEnvelope) void {
+        log.err("trying to publish event {any}", .{ev});
+        log.err("self: {any}", .{self});
+        log.err("self len: {any}", .{self.values.len}); // len is segmentation fault...
         self.values.append(ev) catch @panic("event overflow");
     }
 };
@@ -533,12 +550,14 @@ test "muliplexed game server" {
 
     const gameUUID = UUID.initFromNumber(10);
 
+    log.warn("game uuid {s}", .{gameUUID});
+
     _ = try server.newGame(
         gameUUID,
         &[_]Event{
             .{ .gameCreated = .{
                 .boardSize = 3,
-                .gameId = UUID.initFromNumber(0),
+                .gameId = gameUUID,
             } },
             .{ .playerJoined = test_joinHumanX }, // these must be emitted though a wrapper though
             .{ .playerJoined = test_joinHumanO },
@@ -552,6 +571,25 @@ test "muliplexed game server" {
         .event = .{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } },
     });
 
-    try testing.expectEqual(server.getGame(gameUUID).?.seqId, 3); // sequence must be moved into "metadata"
+    try testing.expectEqual(server.getGame(gameUUID).?.seqId, 3); // sequence must be moved into "metadata", and timestamp as well... I think timestamp is pretty important too
     try testing.expectEqual(server.getGame(gameUUID).?.current_player, .o);
+
+    // errornious event is sent
+    server.onEnvelope(.{
+        .gameId = gameUUID,
+        .timestamp = 0, //???
+        .seqId = 0, //???
+        .event = .{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } }, // bad event, Segmentation fault at address 0x500000019...
+        // .event = .{ .moveMade = .{ .side = .o, .position = .{ .x = 1, .y = 1 } } }, // good event
+    });
+
+    // try testing.expectEqual(publisher.values.buffer[0], EventEnvelope{
+    //     .gameId = gameUUID,
+    //     .seqId = 0,
+    //     .timestamp = 0,
+    //     .event = .{
+    //         .__runtimeError = error.AALLALA,
+    //     },
+    // }); // all these need refactoring
+
 }
