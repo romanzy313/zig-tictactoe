@@ -12,13 +12,26 @@ const testing = std.testing;
 
 pub const Error = error{InvalidUUID};
 
+// not sure if exern is usefull here
 pub const UUID = struct {
-    bytes: [16]u8,
+    bytes: [16]u8, // and if this is normal?
 
     pub fn init() UUID {
         var uuid = UUID{ .bytes = undefined };
 
         crypto.random.bytes(&uuid.bytes);
+        // Version 4
+        uuid.bytes[6] = (uuid.bytes[6] & 0x0f) | 0x40;
+        // Variant 1
+        uuid.bytes[8] = (uuid.bytes[8] & 0x3f) | 0x80;
+        return uuid;
+    }
+
+    // mostly used for testing
+    pub fn initFromNumber(value: u128) UUID {
+        var uuid = UUID{ .bytes = undefined };
+
+        std.mem.writeInt(u128, &uuid.bytes, value, .big);
         // Version 4
         uuid.bytes[6] = (uuid.bytes[6] & 0x0f) | 0x40;
         // Variant 1

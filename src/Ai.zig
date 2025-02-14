@@ -2,7 +2,7 @@ const std = @import("std");
 const game = @import("game.zig");
 const Board = @import("Board.zig");
 
-pub const Difficulty = enum {
+pub const Difficulty = enum(u2) {
     easy,
     medium,
     hard,
