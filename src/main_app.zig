@@ -5,10 +5,10 @@ const game = @import("game.zig");
 const client = @import("client.zig");
 const Ai = @import("Ai.zig");
 const events = @import("events.zig");
-const handler = @import("cli/handler.zig");
 
-const config = @import("config.zig");
-const input = @import("cli/input.zig");
+const handler = @import("app/handler.zig");
+const config = @import("app/config.zig");
+const input = @import("app/input.zig");
 
 // this is main for cli only!
 pub fn main() !void {

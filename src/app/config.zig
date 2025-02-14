@@ -4,14 +4,14 @@ const fmt = std.fmt;
 const debug = std.debug;
 const Allocator = std.mem.Allocator;
 
-const game = @import("game.zig");
-const Ai = @import("Ai.zig");
+const game = @import("../game.zig");
+const Ai = @import("../Ai.zig");
 
 const default_host = "localhost";
 const default_port: u16 = 5432;
 
 // parse into this instead, test all
-pub const Config = union(enum) {
+pub const AppConfig = union(enum) {
     local: struct {
         aiDifficulty: ?Ai.Difficulty,
     },
@@ -96,7 +96,7 @@ test MyIterator {
     try testing.expectEqual(false, iter.skip());
 }
 
-pub fn parseConfig(allocator: Allocator, args: [][]u8) !Config {
+pub fn parseConfig(allocator: Allocator, args: [][]u8) !AppConfig {
     _ = allocator;
 
     var iter = MyIterator{
@@ -115,7 +115,7 @@ pub fn parseConfig(allocator: Allocator, args: [][]u8) !Config {
                 if (std.mem.eql(u8, second, "new")) {
 
                     // parse them out
-                    var config = Config{
+                    var config = AppConfig{
                         .remoteNew = .{
                             .aiDifficulty = null,
                             .host = default_host,
@@ -141,7 +141,7 @@ pub fn parseConfig(allocator: Allocator, args: [][]u8) !Config {
                     }
                     return config;
                 } else if (std.mem.eql(u8, second, "join")) {
-                    var config = Config{
+                    var config = AppConfig{
                         .remoteJoin = .{
                             .code = "",
                             .host = default_host,
@@ -170,7 +170,7 @@ pub fn parseConfig(allocator: Allocator, args: [][]u8) !Config {
                 }
             }
         } else if (std.mem.eql(u8, first, "local")) {
-            var config = Config{
+            var config = AppConfig{
                 .local = .{ .aiDifficulty = null },
             };
 
@@ -228,7 +228,7 @@ test "parseConfig remote new" {
         args,
     );
 
-    try testing.expectEqualDeep(Config{
+    try testing.expectEqualDeep(AppConfig{
         .remoteNew = .{
             .aiDifficulty = .easy,
             .host = "192.168.0.1",
@@ -246,7 +246,7 @@ test "parseConfig remote join" {
         args,
     );
 
-    try testing.expectEqualDeep(Config{
+    try testing.expectEqualDeep(AppConfig{
         .remoteJoin = .{
             .code = "abcd",
             .host = default_host,
@@ -264,7 +264,7 @@ test "parseConfig local" {
         args,
     );
 
-    try testing.expectEqualDeep(Config{
+    try testing.expectEqualDeep(AppConfig{
         .local = .{
             .aiDifficulty = null,
         },
