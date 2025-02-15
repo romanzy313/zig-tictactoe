@@ -42,11 +42,35 @@ pub fn main() !void {
         .{ .playerJoined = .{ .playerId = .{ .human = UUID.initFromNumber(2) }, .side = .o } },
     });
     defer state.deinit();
-    // create handler and client
-    // classic dilemma: client needs handler and handler need client...
-    var game_handler = handler.GameHandler.init(stdin, stdout, &state);
 
-    try game_handler.run();
+    var nav = input.Navigation.init(board_size);
+
+    var game_handler = handler.GameHandler.init(stdout, &state);
+    game_handler.cursor_pos = nav.pos;
+    try game_handler.render(null); // render first frame
+
+    while (game_handler.is_playing) {
+        const cmd = try input.readCommand(stdin);
+        switch (cmd) {
+            .Quit => {
+                try stdout.print("Quitting...\n", .{});
+                return;
+            },
+            .Select => {
+                try game_handler.tick(.{ .select = nav.pos });
+            },
+            else => |nav_cmd| {
+                switch (nav_cmd) {
+                    .Left => nav.onDir(.Left),
+                    .Right => nav.onDir(.Right),
+                    .Up => nav.onDir(.Up),
+                    .Down => nav.onDir(.Down),
+                    else => unreachable,
+                }
+                try game_handler.tick(.{ .hover = nav.pos });
+            },
+        }
+    }
 }
 
 // maybe could be a good idea to use std.testing.refAllDeclsRecursive(@This())
