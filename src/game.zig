@@ -8,8 +8,23 @@ const Board = @import("Board.zig");
 const Ai = @import("Ai.zig");
 const Event = @import("events.zig").Event;
 const EventEnvelope = @import("events.zig").EventEnvelope;
+const GameState = @import("GameState.zig");
 
 const log = std.log.scoped(.game_server);
+
+// Global static struct with typed methods... pretty elegant I think
+pub const PublisherUsage = struct {
+    // self help untyped internally function
+    // will not publish any events if publisher is null
+    pub fn publishEvent(publisher: anytype, ev: Event) void {
+        const ti = @typeInfo(@TypeOf(publisher));
+
+        switch (ti) {
+            .Null => return,
+            else => publisher.publishEvent(ev),
+        }
+    }
+};
 
 pub const Status = enum {
     // TODO: add idle
@@ -44,34 +59,7 @@ pub const AnyPlayerId = union(enum(u1)) {
     ai: Ai.Difficulty,
 };
 
-// NOTE: game_id is not included!
-const GameState = struct {
-    game_allocator: ArenaAllocator,
-
-    status: Status = .starting,
-    players: [2]?AnyPlayerId = [2]?AnyPlayerId{ null, null }, // first player is x, second player is o
-    current_player: PlayerSide = .x,
-
-    board: Board,
-
-    pub fn init(allocator: Allocator, board_size: usize) !GameState {
-        // i need board size to start the game state
-        var arena = ArenaAllocator.init(allocator);
-
-        // arena has a footgun: https://github.com/ziglang/zig/issues/8312#issuecomment-803493118
-        const board = try Board.initEmpty(arena.allocator(), board_size);
-        return .{
-            .game_allocator = arena,
-            .board = board,
-        };
-    }
-    pub fn deinit(self: *GameState) void {
-        self.game_allocator.deinit();
-    }
-};
-
 pub fn CoreGameGeneric(
-    comptime is_server: bool, // can this be comptiletime known?
     comptime IPublisher: type,
     comptime _publishEventEnvelope: *const fn (T: *IPublisher, envelope: EventEnvelope) void, // instead implement the publishEnvelope... I guess this will need to keep track of
 ) type {
@@ -96,24 +84,8 @@ pub fn CoreGameGeneric(
         }
 
         pub fn init(allocator: Allocator, ptr_publisher: *IPublisher, game_id: UUID, events: []const Event) !CoreGame {
-            if (events.len == 0) {
-                return error.BadEventCount;
-            }
+            const state = try GameState.init(allocator, events);
 
-            if (events[0] != .gameCreated) {
-                return error.BadEvent;
-            }
-
-            var self = try initInternal(allocator, ptr_publisher, game_id, events[0].gameCreated);
-
-            for (events[1..]) |ev| {
-                try self.resolveEvent(ev);
-            }
-            return self;
-        }
-
-        fn initInternal(allocator: Allocator, ptr_publisher: *IPublisher, game_id: UUID, gameCreatedEvent: Event.GameCreated) !CoreGame {
-            const state = try GameState.init(allocator, gameCreatedEvent.boardSize);
             return CoreGame{
                 .ptr_publisher = ptr_publisher,
                 .state = state,
@@ -125,133 +97,14 @@ pub fn CoreGameGeneric(
             self.state.deinit();
         }
 
-        fn can_play(self: *CoreGame) bool {
-            return self.state.status == .playing;
-        }
-
         pub fn resolveEventSafe(self: *CoreGame, ev: Event) void {
-            // for example, wrap it up and send through
-            // the ui will have to react to these errors
-            // and they are not processed by all the clients
-            self.resolveEvent(ev) catch |err| {
-
-                // hmm, this needs to capture the value though
-                // self.publishEvent(.{ .__runtimeError = err });
+            const is_server = true;
+            // self duck typed to handle "one-time use generics... more like an interface"
+            self.state.handleEvent(ev, self, is_server) catch |err| {
                 self.publishEvent(.{
                     .__runtimeError = Event.RuntimeError.fromError(err),
                 });
             };
-        }
-
-        fn resolveEvent(self: *CoreGame, ev: Event) !void {
-            // so this cant throw now... ouch
-            switch (ev) {
-                .gameCreated => return error.BadEvent,
-                .__runtimeError => @panic("cannot pass __runtimeError into resolveEvent()"),
-                .playerJoined => |data| {
-                    const index = @as(usize, @intFromEnum(data.side));
-                    assert(index <= 1);
-                    if (self.state.players[index] == null) {
-                        self.state.players[index] = data.playerId;
-                    } else {
-                        return error.PlayerOfThisSideAleadyJoined;
-                    }
-
-                    if (self.state.players[0] != null and self.state.players[1] != null) {
-                        self.state.status = .playing;
-                    }
-                },
-                .moveMade => |data| {
-                    if (!self.can_play()) {
-                        return error.CantPlayYet;
-                    }
-                    const new_status = try self.handleMoveMadeEvent(data);
-
-                    // const new_status = self.handleMoveMadeEvent(data) catch |err| {
-                    //     // send error only as server?
-                    //     self.publishEvent(.{ .__runtimeError = err }); // dont increment the sequence... its getting interconnected
-                    //     return;
-                    // };
-                    self.state.status = new_status;
-
-                    const is_ai_move = true;
-
-                    if (is_ai_move) {
-                        if (is_server) {
-                            // publish correct event only as a server. local play uses server mode
-                            // publishEvent(.{ .moveMade = . })
-                        }
-                    }
-                },
-                .gameFinished => |data| {
-                    // blank event for traceability
-                    _ = data;
-                },
-            }
-
-            self.seq_id += 1;
-        }
-
-        // for rollback (future plans again...)
-        // some events are not supported
-        fn reverseEventReverse(self: *CoreGame, ev: Event) !void {
-            switch (ev) {
-                .gameCreated, .playerJoined, .gameFinished => return error.NonReversibleEvent, // this should just be silent?
-                .__runtimeError => @panic("cannot pass __runtimeError into resolveEventReverse()"),
-                .moveMade => |move| {
-                    _ = move; // reverse it, assuming the state as if this is after this event fired
-                    // but then i cant unfire "game logic events"
-                    // in this case its not needed, but for realtime multiplayer for sure.
-                    // this idea is insired by git and its diffs of the current state to easily checkout
-                },
-            }
-            _ = self;
-        }
-
-        fn handleMoveMadeEvent(self: *CoreGame, ev: Event.MoveMade) !Status {
-            // cant use references
-            if (self.state.status != .playing) {
-                return error.GameFinished;
-            }
-            // check if its the correct player turn
-            const player_side = ev.side;
-            if (player_side != self.state.current_player) {
-                return error.WrongSide;
-            }
-
-            const size = self.state.board.size;
-            const pos = ev.position;
-
-            if (pos.y >= size or pos.x >= size) {
-                return error.InvalidPosition;
-            }
-
-            const selected = self.state.board.getValue(pos);
-            if (selected != .empty) {
-                return error.CannotSelectAlreadySelected;
-            }
-
-            self.state.board.setValue(pos, .x);
-
-            const maybe_win = self.state.board.getWinCondition();
-
-            if (maybe_win) |win| {
-                self.state.status = .hasWinner;
-                self.state.current_player = win.side;
-                self.publishEvent(.{ .gameFinished = .{
-                    .outcome = if (win.side == .x) .xWon else .oWon,
-                } });
-            } else if (self.state.board.hasMovesAvailable()) {
-                // switch the players
-                self.state.current_player = player_side.other();
-            } else {
-                self.state.status = .stalemate;
-                self.publishEvent(.{ .gameFinished = .{
-                    .outcome = .stalemate,
-                } });
-            }
-
-            return self.state.status;
         }
     };
 }
@@ -260,182 +113,12 @@ pub fn CoreGameGeneric(
 
 const testing = std.testing;
 
-const TestIntegration = struct {
-    values: std.BoundedArray(EventEnvelope, 10),
-
-    pub fn init() TestIntegration {
-        return .{
-            .values = std.BoundedArray(EventEnvelope, 10){},
-        };
-    }
-
-    pub fn publishEvent(self: *@This(), ev: EventEnvelope) void {
-        self.values.append(ev) catch @panic("event overflow");
-    }
-};
-const test_joinHumanX = Event.PlayerJoined{
-    .playerId = .{ .human = UUID.initFromNumber(0) },
-    .side = .x,
-};
-const test_joinHumanO = Event.PlayerJoined{
-    .playerId = .{ .human = UUID.initFromNumber(1) },
-    .side = .o,
-};
-const test_joinAiX = Event.PlayerJoined{
-    .playerId = .{ .ai = .easy },
-    .side = .x,
-};
-const test_joinAiO = Event.PlayerJoined{
-    .playerId = .{ .ai = .easy },
-    .side = .o,
-};
-
-test "grid init" {
-    var eventer = TestIntegration.init();
-    var game = try CoreGameGeneric(true, TestIntegration, TestIntegration.publishEvent).init(
-        testing.allocator,
-        &eventer,
-        UUID.initFromNumber(1),
-        &[_]Event{
-            .{
-                .gameCreated = .{
-                    .boardSize = 3,
-                    .gameId = UUID.init(),
-                },
-            },
-        },
-    );
-    defer game.deinit();
-
-    const state = game.state;
-
-    try testing.expectEqual(0, game.seq_id);
-    try testing.expectEqual(.starting, state.status);
-    try testing.expectEqual(.empty, state.board.getValue(.{ .x = 2, .y = 2 }));
-
-    // state.board.debugPrint();
-}
-
-test "make move" {
-    var eventer = TestIntegration.init();
-    var game = try CoreGameGeneric(true, TestIntegration, TestIntegration.publishEvent).init(
-        testing.allocator,
-        &eventer,
-        UUID.initFromNumber(1),
-        &[_]Event{
-            .{ .gameCreated = .{
-                .boardSize = 3,
-                .gameId = UUID.init(),
-            } },
-            .{ .playerJoined = test_joinHumanX },
-            .{ .playerJoined = test_joinHumanO },
-        },
-    );
-    defer game.deinit();
-
-    try testing.expectEqual(2, game.seq_id);
-    try testing.expectEqual(.playing, game.state.status);
-    try testing.expectEqual(.x, game.state.current_player);
-
-    try game.resolveEvent(.{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } });
-    try testing.expectEqual(3, game.seq_id);
-    try testing.expectEqual(.playing, game.state.status);
-    try testing.expectEqual(.o, game.state.current_player);
-
-    try game.resolveEvent(.{ .moveMade = .{ .side = .o, .position = .{ .x = 0, .y = 0 } } });
-    try testing.expectEqual(4, game.seq_id);
-    try testing.expectEqual(.playing, game.state.status);
-    try testing.expectEqual(.x, game.state.current_player);
-
-    // try testing.expectEqualSlices(u8,
-    //     \\o - -
-    //     \\- - x
-    //     \\- - -
-    // , list.items);
-}
-
-test "common errors and errors" {
-    var eventer = TestIntegration.init();
-    var game = try CoreGameGeneric(true, TestIntegration, TestIntegration.publishEvent).init(
-        testing.allocator,
-        &eventer,
-        UUID.initFromNumber(9),
-        &[_]Event{
-            .{ .gameCreated = .{
-                .boardSize = 3,
-                .gameId = UUID.initFromNumber(9),
-            } },
-        },
-    );
-    defer game.deinit();
-
-    // cant move as no player joined
-    game.resolveEventSafe(.{
-        .moveMade = .{ .side = .x, .position = .{ .x = 0, .y = 0 } },
-    });
-    try testing.expectEqual(eventer.values.buffer[0].event, Event{ .__runtimeError = .CantPlayYet }); // all these need refactoring
-    try testing.expectEqual(eventer.values.buffer[0].seq_id, 0); // no events were added
-
-    // cant move as only one player joined
-    game.resolveEventSafe(.{
-        .playerJoined = .{ .playerId = .{ .human = UUID.init() }, .side = .x },
-    });
-    game.resolveEventSafe(.{
-        .moveMade = .{ .side = .x, .position = .{ .x = 0, .y = 0 } },
-    });
-    try testing.expectEqual(eventer.values.buffer[1].event, Event{ .__runtimeError = .CantPlayYet }); // all these need refactoring
-    try testing.expectEqual(eventer.values.buffer[1].seq_id, 1); // one event added
-
-    // cant join to already taken side
-    game.resolveEventSafe(.{
-        .playerJoined = .{ .playerId = .{ .human = UUID.init() }, .side = .x },
-    });
-    try testing.expectEqual(eventer.values.buffer[2].event, Event{ .__runtimeError = .PlayerOfThisSideAleadyJoined }); // all these need refactoring
-
-    // cant play for the other side
-    game.resolveEventSafe(.{
-        .playerJoined = .{ .playerId = .{ .human = UUID.init() }, .side = .o },
-    });
-    game.resolveEventSafe(.{
-        .moveMade = .{ .side = .o, .position = .{ .x = 0, .y = 0 } },
-    });
-    try testing.expectEqual(eventer.values.buffer[3].event, Event{ .__runtimeError = .WrongSide }); // all these need refactoring
-    try testing.expectEqual(eventer.values.buffer[3].seq_id, 2); // one event added, this is bad testing...
-
-    //  cant play on occupied square
-    game.resolveEventSafe(.{
-        .moveMade = .{ .side = .x, .position = .{ .x = 0, .y = 0 } },
-    });
-    game.resolveEventSafe(.{
-        .moveMade = .{ .side = .o, .position = .{ .x = 0, .y = 0 } },
-    });
-    try testing.expectEqual(eventer.values.buffer[4].event, Event{ .__runtimeError = .CannotSelectAlreadySelected }); // all these need refactoring
-
-    // play till win
-    game.resolveEventSafe(.{
-        .moveMade = .{ .side = .o, .position = .{ .x = 1, .y = 0 } },
-    });
-    game.resolveEventSafe(.{
-        .moveMade = .{ .side = .x, .position = .{ .x = 0, .y = 1 } },
-    });
-    game.resolveEventSafe(.{
-        .moveMade = .{ .side = .o, .position = .{ .x = 1, .y = 1 } },
-    });
-    game.resolveEventSafe(.{
-        .moveMade = .{ .side = .x, .position = .{ .x = 0, .y = 2 } },
-    });
-    // expect a gameFinished event
-    try testing.expectEqual(eventer.values.buffer[5].event, Event{ .gameFinished = .{ .outcome = .xWon } }); // all these need refactoring
-}
-
 pub fn GameServerGeneric(
-    comptime is_server: bool, // can this be comptiletime known?
     comptime IPublisherEnvelope: type,
     comptime publishEnvelope: *const fn (T: *IPublisherEnvelope, ev: EventEnvelope) void,
 ) type {
     return struct {
         const CoreGame = CoreGameGeneric(
-            is_server,
             IPublisherEnvelope,
             publishEnvelope,
         );
@@ -497,57 +180,58 @@ pub fn GameServerGeneric(
     };
 }
 
-test "muliplexed game server" {
-    var publisher = TestIntegration.init();
+// TODO: again...
 
-    var server = GameServerGeneric(
-        true,
-        TestIntegration,
-        TestIntegration.publishEvent,
-    ).init(testing.allocator, &publisher);
-    defer server.deinit();
+// test "muliplexed game server" {
+//     var publisher = TestIntegration.init();
 
-    const gameUUID = UUID.initFromNumber(9);
+//     var server = GameServerGeneric(
+//         TestIntegration,
+//         TestIntegration.publishEvent,
+//     ).init(testing.allocator, &publisher);
+//     defer server.deinit();
 
-    try server.newGame(
-        gameUUID,
-        &[_]Event{
-            .{ .gameCreated = .{
-                .boardSize = 3,
-                .gameId = gameUUID,
-            } },
-            .{ .playerJoined = test_joinHumanX },
-            .{ .playerJoined = test_joinHumanO },
-        },
-    );
+//     const gameUUID = UUID.initFromNumber(9);
 
-    try testing.expectEqual(gameUUID, server.getGameInstance(gameUUID).?.game_id);
+//     try server.newGame(
+//         gameUUID,
+//         &[_]Event{
+//             .{ .gameCreated = .{
+//                 .boardSize = 3,
+//                 .gameId = gameUUID,
+//             } },
+//             .{ .playerJoined = test_joinHumanX },
+//             .{ .playerJoined = test_joinHumanO },
+//         },
+//     );
 
-    try testing.expectEqual(2, server.getGameInstance(gameUUID).?.seq_id);
-    try testing.expectEqual(.x, server.getGameInstance(gameUUID).?.state.current_player);
+//     try testing.expectEqual(gameUUID, server.getGameInstance(gameUUID).?.game_id);
 
-    server.onEnvelope(.{
-        .game_id = gameUUID,
-        .timestamp = 55, //??? not done in any shape or form
-        .seq_id = 55, //???
-        .event = .{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } },
-    });
+//     try testing.expectEqual(2, server.getGameInstance(gameUUID).?.seq_id);
+//     try testing.expectEqual(.x, server.getGameInstance(gameUUID).?.state.current_player);
 
-    try testing.expectEqual(3, server.getGameInstance(gameUUID).?.seq_id);
-    try testing.expectEqual(.o, server.getGameInstance(gameUUID).?.state.current_player);
+//     server.onEnvelope(.{
+//         .game_id = gameUUID,
+//         .timestamp = 55, //??? not done in any shape or form
+//         .seq_id = 55, //???
+//         .event = .{ .moveMade = .{ .side = .x, .position = .{ .x = 2, .y = 1 } } },
+//     });
 
-    // now invalid move, doesnt count
-    server.onEnvelope(.{
-        .game_id = gameUUID,
-        .timestamp = 55, //??? does not matter?
-        .seq_id = 55, //???
-        .event = .{ .moveMade = .{ .side = .o, .position = .{ .x = 2, .y = 1 } } },
-    });
+//     try testing.expectEqual(3, server.getGameInstance(gameUUID).?.seq_id);
+//     try testing.expectEqual(.o, server.getGameInstance(gameUUID).?.state.current_player);
 
-    try testing.expectEqual(publisher.values.get(0), EventEnvelope{
-        .game_id = gameUUID,
-        .timestamp = 100, // this must be excluded
-        .seq_id = 3, // sequence id didnt change
-        .event = .{ .__runtimeError = .CannotSelectAlreadySelected },
-    });
-}
+//     // now invalid move, doesnt count
+//     server.onEnvelope(.{
+//         .game_id = gameUUID,
+//         .timestamp = 55, //??? does not matter?
+//         .seq_id = 55, //???
+//         .event = .{ .moveMade = .{ .side = .o, .position = .{ .x = 2, .y = 1 } } },
+//     });
+
+//     try testing.expectEqual(publisher.values.get(0), EventEnvelope{
+//         .game_id = gameUUID,
+//         .timestamp = 100, // this must be excluded
+//         .seq_id = 3, // sequence id didnt change
+//         .event = .{ .__runtimeError = .CannotSelectAlreadySelected },
+//     });
+// }

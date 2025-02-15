@@ -1,10 +1,11 @@
 const std = @import("std");
-const game = @import("game.zig");
-const Board = @import("Board.zig");
-const Ai = @import("Ai.zig");
-const UUID = @import("uuid").UUID;
 const AnyWriter = std.io.AnyWriter;
 const AnyReader = std.io.AnyReader;
+const UUID = @import("uuid").UUID;
+
+const game = @import("game.zig");
+const Ai = @import("Ai.zig");
+const Board = @import("Board.zig");
 
 const testing = std.testing;
 
