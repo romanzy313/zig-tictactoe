@@ -134,11 +134,17 @@ pub fn CoreGameGeneric(
             // the ui will have to react to these errors
             // and they are not processed by all the clients
             self.resolveEvent(ev) catch |err| {
-                self.publishEvent(.{ .__runtimeError = err });
+
+                // hmm, this needs to capture the value though
+                // self.publishEvent(.{ .__runtimeError = err });
+                self.publishEvent(.{
+                    .__runtimeError = Event.RuntimeError.fromError(err),
+                });
             };
         }
 
         fn resolveEvent(self: *CoreGame, ev: Event) !void {
+            // so this cant throw now... ouch
             switch (ev) {
                 .gameCreated => return error.BadEvent,
                 .__runtimeError => @panic("cannot pass __runtimeError into resolveEvent()"),
@@ -367,7 +373,7 @@ test "common errors and errors" {
     game.resolveEventSafe(.{
         .moveMade = .{ .side = .x, .position = .{ .x = 0, .y = 0 } },
     });
-    try testing.expectEqual(eventer.values.buffer[0].event, Event{ .__runtimeError = error.CantPlayYet }); // all these need refactoring
+    try testing.expectEqual(eventer.values.buffer[0].event, Event{ .__runtimeError = .CantPlayYet }); // all these need refactoring
     try testing.expectEqual(eventer.values.buffer[0].seq_id, 0); // no events were added
 
     // cant move as only one player joined
@@ -377,14 +383,14 @@ test "common errors and errors" {
     game.resolveEventSafe(.{
         .moveMade = .{ .side = .x, .position = .{ .x = 0, .y = 0 } },
     });
-    try testing.expectEqual(eventer.values.buffer[1].event, Event{ .__runtimeError = error.CantPlayYet }); // all these need refactoring
+    try testing.expectEqual(eventer.values.buffer[1].event, Event{ .__runtimeError = .CantPlayYet }); // all these need refactoring
     try testing.expectEqual(eventer.values.buffer[1].seq_id, 1); // one event added
 
     // cant join to already taken side
     game.resolveEventSafe(.{
         .playerJoined = .{ .playerId = .{ .human = UUID.init() }, .side = .x },
     });
-    try testing.expectEqual(eventer.values.buffer[2].event, Event{ .__runtimeError = error.PlayerOfThisSideAleadyJoined }); // all these need refactoring
+    try testing.expectEqual(eventer.values.buffer[2].event, Event{ .__runtimeError = .PlayerOfThisSideAleadyJoined }); // all these need refactoring
 
     // cant play for the other side
     game.resolveEventSafe(.{
@@ -393,7 +399,7 @@ test "common errors and errors" {
     game.resolveEventSafe(.{
         .moveMade = .{ .side = .o, .position = .{ .x = 0, .y = 0 } },
     });
-    try testing.expectEqual(eventer.values.buffer[3].event, Event{ .__runtimeError = error.WrongSide }); // all these need refactoring
+    try testing.expectEqual(eventer.values.buffer[3].event, Event{ .__runtimeError = .WrongSide }); // all these need refactoring
     try testing.expectEqual(eventer.values.buffer[3].seq_id, 2); // one event added, this is bad testing...
 
     //  cant play on occupied square
@@ -403,7 +409,7 @@ test "common errors and errors" {
     game.resolveEventSafe(.{
         .moveMade = .{ .side = .o, .position = .{ .x = 0, .y = 0 } },
     });
-    try testing.expectEqual(eventer.values.buffer[4].event, Event{ .__runtimeError = error.CannotSelectAlreadySelected }); // all these need refactoring
+    try testing.expectEqual(eventer.values.buffer[4].event, Event{ .__runtimeError = .CannotSelectAlreadySelected }); // all these need refactoring
 
     // play till win
     game.resolveEventSafe(.{
@@ -542,6 +548,6 @@ test "muliplexed game server" {
         .game_id = gameUUID,
         .timestamp = 100, // this must be excluded
         .seq_id = 3, // sequence id didnt change
-        .event = .{ .__runtimeError = error.CannotSelectAlreadySelected },
+        .event = .{ .__runtimeError = .CannotSelectAlreadySelected },
     });
 }

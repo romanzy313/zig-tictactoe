@@ -15,12 +15,12 @@ pub const EventEnvelope = struct {
     timestamp: u64,
     event: Event,
 
-    pub fn init(gameId: UUID, seqId: u32, timestamp: u64, data: Event) EventEnvelope {
+    pub fn init(game_id: UUID, seq_id: u32, timestamp: u64, event: Event) EventEnvelope {
         return .{
-            .gameId = gameId,
-            .seqId = seqId,
+            .game_id = game_id,
+            .seq_id = seq_id,
             .timestamp = timestamp,
-            .data = data,
+            .event = event,
         };
     }
 
@@ -28,8 +28,65 @@ pub const EventEnvelope = struct {
 
     // ignore the game_id here when encoding
     // still provide it when decoding?
-    pub fn toBin() void {}
+    // but instead im just gonna do json for this whole object
+    // with static
+    pub fn toBin(self: EventEnvelope, writer: AnyWriter) !void {
+        try std.json.stringify(self, .{}, writer);
+        try writer.writeByte('\n'); // ugly add a delimiter
+
+        // to not write __runtimeError
+        // switch (self.event) {
+        //     .__runtimeError => _ = try writer.write("__runtimeError\n"),
+        //     else => {
+        //         try std.json.stringify(self, .{}, writer);
+        //         try writer.writeByte('\n'); // ugly add a delimiter
+        //     },
+        // }
+    }
+
+    pub fn fromBin(reader: AnyReader) !EventEnvelope {
+        const max_size = 200; //ughhh
+        var buff: [max_size]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buff);
+        try reader.streamUntilDelimiter(fbs.writer(), '\n', max_size);
+
+        // this is really ugly though
+        var buff2: [200]u8 = undefined;
+        var alloc = std.heap.FixedBufferAllocator.init(&buff2);
+
+        const res = try std.json.parseFromSlice(EventEnvelope, alloc.allocator(), fbs.getWritten(), .{
+            .allocate = .alloc_if_needed,
+        });
+        defer res.deinit();
+
+        return res.value;
+    }
 };
+
+test EventEnvelope {
+    var buff: [200]u8 = undefined;
+    var rw = std.io.fixedBufferStream(&buff);
+
+    const og = EventEnvelope.init(
+        UUID.initFromNumber(9),
+        10,
+        30,
+        .{ .moveMade = .{
+            .side = .x,
+            .position = .{ .x = 3, .y = 3 },
+        } },
+    );
+
+    try og.toBin(rw.writer().any());
+
+    // std.debug.print("encoded value: {s}\n", .{rw.getWritten()});
+
+    try rw.seekTo(0);
+
+    const res = try EventEnvelope.fromBin(rw.reader().any());
+
+    try testing.expectEqual(og, res);
+}
 
 pub const Event = union(enum) {
     gameCreated: GameCreated,
@@ -40,7 +97,8 @@ pub const Event = union(enum) {
     // this non-serializeable event is used for sending errors over the network
     // and used by the app rendering to redraw error box as errors come in
     // TODO: scope all possible Errors into GameErrors, dont use anyerror
-    __runtimeError: anyerror,
+    // __runtimeError: RuntimeEncodedError,
+    __runtimeError: RuntimeError, // no error reporting yet
 
     pub const GameCreated = struct {
         gameId: UUID,
@@ -121,7 +179,7 @@ pub const Event = union(enum) {
 
             try og.toBin(rw.writer().any());
 
-            std.debug.print("encoded value: {s}\n", .{rw.getWritten()});
+            // std.debug.print("encoded value: {s}\n", .{rw.getWritten()});
 
             try rw.seekTo(0);
 
@@ -136,5 +194,27 @@ pub const Event = union(enum) {
     };
     pub const GameFinished = struct {
         outcome: game.GameOutcome,
+    };
+
+    pub const RuntimeError = enum {
+        BROKEN_IMPL,
+
+        GameFinished,
+        BadEvent,
+        PlayerOfThisSideAleadyJoined,
+        CantPlayYet,
+        WrongSide,
+        InvalidPosition,
+        CannotSelectAlreadySelected,
+
+        pub fn fromError(err: anyerror) RuntimeError {
+            return switch (err) {
+                error.CannotSelectAlreadySelected => .CannotSelectAlreadySelected,
+                error.CantPlayYet => .CantPlayYet,
+                error.PlayerOfThisSideAleadyJoined => .PlayerOfThisSideAleadyJoined,
+                error.WrongSide => .WrongSide,
+                else => .BROKEN_IMPL,
+            };
+        }
     };
 };
