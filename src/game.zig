@@ -95,7 +95,6 @@ pub fn CoreGameGeneric(
             _publishEventEnvelope(self.ptr_publisher, envelope);
         }
 
-        // should events be owned slice (aka []const event.Event?)
         pub fn init(allocator: Allocator, ptr_publisher: *IPublisher, game_id: UUID, events: []const Event) !CoreGame {
             if (events.len == 0) {
                 return error.BadEventCount;
@@ -113,7 +112,6 @@ pub fn CoreGameGeneric(
             return self;
         }
 
-        // to avoid constant board.?, we force first event to be available on creation
         fn initInternal(allocator: Allocator, ptr_publisher: *IPublisher, game_id: UUID, gameCreatedEvent: Event.GameCreated) !CoreGame {
             const state = try GameState.init(allocator, gameCreatedEvent.boardSize);
             return CoreGame{
