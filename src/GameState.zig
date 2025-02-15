@@ -54,6 +54,20 @@ fn can_play(self: *GameState) bool {
     return self.status == .playing;
 }
 
+pub fn writeStatus(self: *GameState, writer: anytype) !void {
+    switch (self.status) {
+        .starting => try writer.print("Waiting for game to start", .{}),
+        .playing => switch (self.current_player) {
+            .x => try writer.print("Player X turn", .{}),
+            .o => try writer.print("Player O turn", .{}),
+        },
+        .hasWinner => switch (self.current_player) {
+            .x => try writer.print("Player X won", .{}),
+            .o => try writer.print("Player O won", .{}),
+        },
+        .stalemate => try writer.print("Stalemate", .{}),
+    }
+}
 // there are sideeffects provided on this.
 // anytype is given to publish events and is_server is passed to
 
@@ -124,7 +138,10 @@ fn handleMoveMadeEvent(state: *GameState, ev: Event.MoveMade, publisher: anytype
         return error.CannotSelectAlreadySelected;
     }
 
-    state.board.setValue(pos, .x);
+    state.board.setValue(pos, switch (player_side) {
+        .x => .x,
+        .o => .o,
+    });
 
     const maybe_win = state.board.getWinCondition();
 
@@ -152,7 +169,7 @@ fn handleMoveMadeEvent(state: *GameState, ev: Event.MoveMade, publisher: anytype
 const TestPublisher = struct {
     values: std.BoundedArray(Event, 10) = std.BoundedArray(Event, 10){},
 
-    pub fn publishEvent(self: *@This(), ev: Event) void {
+    pub fn onEvent(self: *@This(), ev: Event) void {
         self.values.append(ev) catch @panic("event overflow");
     }
 };

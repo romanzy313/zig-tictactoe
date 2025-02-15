@@ -20,8 +20,13 @@ pub const PublisherUsage = struct {
         const ti = @typeInfo(@TypeOf(publisher));
 
         switch (ti) {
-            .Null => return,
-            else => publisher.publishEvent(ev),
+            .Null => {
+                // std.debug.print("not published event as null: {any}\n", .{ev});
+            },
+            else => {
+                // std.debug.print("publishing event: {any}\n", .{ev});
+                publisher.onEvent(ev);
+            },
         }
     }
 };
@@ -35,6 +40,9 @@ pub const Status = enum {
 
     pub fn isPlaying(self: Status) bool {
         return self == .playing;
+    }
+    pub fn isGameOver(self: Status) bool {
+        return self == .hasWinner or self == .stalemate;
     }
 };
 

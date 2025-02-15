@@ -74,7 +74,6 @@ pub const Navigation = struct {
     gridSize: usize,
     pos: Board.CellPosition,
 
-    // TODO: infer initial position
     pub fn init(gridSize: usize) Navigation {
         const half = @divFloor(gridSize, 2);
         return .{
