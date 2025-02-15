@@ -14,6 +14,8 @@ const fmt = std.fmt;
 const json = std.json;
 const Allocator = std.mem.Allocator;
 const testing = std.testing;
+const AnyWriter = std.io.AnyWriter;
+const AnyReader = std.io.AnyReader;
 
 pub const Error = error{InvalidUUID};
 
@@ -44,6 +46,16 @@ pub const UUID = struct {
         return uuid;
     }
 
+    pub fn write(self: UUID, writer: AnyWriter) !void {
+        try writer.writeAll(&self.bytes);
+    }
+    pub fn read(reader: AnyReader) !UUID {
+        var uuid = UUID{ .bytes = undefined };
+
+        // TODO: keep track of the amount of bytes read?
+        _ = try reader.readAll(&uuid.bytes);
+        return uuid;
+    }
     /// no idea if this is right, probably not
     pub fn copy(self: UUID) UUID {
         var uuid = UUID{ .bytes = undefined };

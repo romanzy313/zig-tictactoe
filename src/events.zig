@@ -3,6 +3,10 @@ const game = @import("game.zig");
 const Board = @import("Board.zig");
 const Ai = @import("Ai.zig");
 const UUID = @import("uuid").UUID;
+const AnyWriter = std.io.AnyWriter;
+const AnyReader = std.io.AnyReader;
+
+const testing = std.testing;
 
 // this is an envelope when data is being sent to the server
 pub const EventEnvelope = struct {
@@ -21,6 +25,10 @@ pub const EventEnvelope = struct {
     }
 
     // toBin and fromBin must be implemented on this
+
+    // ignore the game_id here when encoding
+    // still provide it when decoding?
+    pub fn toBin() void {}
 };
 
 pub const Event = union(enum) {
@@ -36,14 +44,91 @@ pub const Event = union(enum) {
 
     pub const GameCreated = struct {
         gameId: UUID,
-        boardSize: usize,
+        boardSize: u8,
         timeLimit: u64 = 0, // TODO: maybe implement this too?
+
+        pub fn toBin(self: @This(), writer: AnyWriter) !void {
+            try self.gameId.write(writer);
+            try writer.writeInt(u8, self.boardSize, .big);
+        }
+        pub fn fromBin(reader: AnyReader) !@This() {
+            return .{
+                .gameId = try UUID.read(reader),
+                .boardSize = try reader.readInt(u8, .big),
+            };
+        }
+
+        test "to/from Bin" {
+            var buff: [100]u8 = undefined;
+            var rw = std.io.fixedBufferStream(&buff);
+
+            const og = GameCreated{
+                .gameId = UUID.initFromNumber(9),
+                .boardSize = 3,
+            };
+
+            try og.toBin(rw.writer().any());
+
+            try rw.seekTo(0);
+
+            const res = try GameCreated.fromBin(rw.reader().any());
+
+            try testing.expectEqual(og, res);
+        }
     };
 
     pub const PlayerJoined = struct {
         playerId: game.AnyPlayerId, // Ai is part of this
         // name: [30:0]u8, // enforce max size, zero terminated. This should be persistent in the db and not stored here
         side: game.PlayerSide,
+
+        // pub fn toBin(self: @This(), writer: AnyWriter) void {}
+        // pub fn fromBin(reader: AnyReader) @This() {}
+
+        pub fn toBin(self: PlayerJoined, writer: AnyWriter) !void {
+            // json wrap here?
+            try std.json.stringify(self, .{}, writer);
+
+            try writer.writeByte('\n'); // ugly add a delimiter
+        }
+        pub fn fromBin(reader: AnyReader) !PlayerJoined {
+            const buff_size = 100;
+            // allocator needed...
+            var buff: [buff_size]u8 = undefined;
+            var fbs = std.io.fixedBufferStream(&buff);
+            try reader.streamUntilDelimiter(fbs.writer(), '\n', buff_size);
+
+            // this is really ugly though
+            var buff2: [buff_size]u8 = undefined;
+            var alloc = std.heap.FixedBufferAllocator.init(&buff2);
+            const res = try std.json.parseFromSlice(PlayerJoined, alloc.allocator(), fbs.getWritten(), .{
+                .max_value_len = buff_size,
+                .allocate = .alloc_if_needed,
+            });
+            defer res.deinit();
+
+            return res.value;
+        }
+
+        test "to/from Bin" {
+            var buff: [100]u8 = undefined;
+            var rw = std.io.fixedBufferStream(&buff);
+
+            const og = PlayerJoined{
+                .playerId = .{ .human = UUID.initFromNumber(9) },
+                .side = .x,
+            };
+
+            try og.toBin(rw.writer().any());
+
+            std.debug.print("encoded value: {s}\n", .{rw.getWritten()});
+
+            try rw.seekTo(0);
+
+            const res = try PlayerJoined.fromBin(rw.reader().any());
+
+            try testing.expectEqual(og, res);
+        }
     };
     pub const MoveMade = struct {
         side: game.PlayerSide,
