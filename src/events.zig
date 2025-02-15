@@ -157,10 +157,9 @@ pub const Event = union(enum) {
             try reader.streamUntilDelimiter(fbs.writer(), '\n', buff_size);
 
             // this is really ugly though
-            var buff2: [buff_size]u8 = undefined;
+            var buff2: [200]u8 = undefined;
             var alloc = std.heap.FixedBufferAllocator.init(&buff2);
             const res = try std.json.parseFromSlice(PlayerJoined, alloc.allocator(), fbs.getWritten(), .{
-                .max_value_len = buff_size,
                 .allocate = .alloc_if_needed,
             });
             defer res.deinit();
