@@ -10,3 +10,5 @@ This game can be coded in a single function, but I have decided to implement it 
 - Monorepo-like architecture, to learn about the build system
 
 Feel free to look around and get insired by this project!
+
+Compile with zig 13.0
