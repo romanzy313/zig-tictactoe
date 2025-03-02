@@ -17,6 +17,13 @@ pub const HandlerEvent = union(enum) {
     hover: Board.CellPosition,
 };
 
+// I want this to be interface independent, huh
+// so i must pass all this to the renderer and stuff
+// This is "AppHandler", it deals with the state. It gets sent events from the outside
+//
+// 2 functions are passed:
+//   render() to update the ui
+//   publisher is anytype, but its also needed
 pub const GameHandler = struct {
     writer: AnyWriter,
 
@@ -65,6 +72,21 @@ pub const GameHandler = struct {
         try renderer.render(self.writer, self.state, self.cursor_pos, maybe_err);
     }
 
+    // TODO
+    // pub fn handleEventFromServer(self: *GameHandler, ev: Event) {
+    //     const mockPublisher = null;
+
+    //     self.state.handleEvent(ev, self, true) catch |err| {
+    //         self.onEvent(.{
+    //             .__runtimeError = Event.RuntimeError.fromError(err),
+    //         });
+    //         return;
+    //     };
+    //     try self.render(null);
+    //     // the publisher becomes self?
+    //     // because this will need to publish things... oh the publisher is provided
+    // }
+
     // returns false when done
     pub fn tick(self: *GameHandler, value: HandlerEvent) !void {
         switch (value) {
@@ -76,6 +98,7 @@ pub const GameHandler = struct {
                     .side = self.state.current_player,
                 } };
 
+                // self here only works for the local multiplayer
                 self.state.handleEvent(ev, self, true) catch |err| {
                     self.onEvent(.{
                         .__runtimeError = Event.RuntimeError.fromError(err),
@@ -85,6 +108,7 @@ pub const GameHandler = struct {
                 try self.render(null);
             },
             .hover => |position| {
+                // purely local state
                 self.cursor_pos = position;
                 try self.render(null);
             },
