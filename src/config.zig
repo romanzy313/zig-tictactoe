@@ -4,97 +4,54 @@ const fmt = std.fmt;
 const debug = std.debug;
 const Allocator = std.mem.Allocator;
 
-const game = @import("../game.zig");
-const Ai = @import("../Ai.zig");
+const game = @import("game.zig");
+const Ai = @import("Ai.zig");
 
 const default_host = "localhost";
 const default_port: u16 = 5432;
 
-// parse into this instead, test all
+// TODO: dont use custom iterator, use ducktyped one
+
+pub const RenderMode = enum { cli, gui };
+
 pub const AppConfig = union(enum) {
     local: struct {
+        renderMode: RenderMode,
+
         aiDifficulty: ?Ai.Difficulty,
     },
     remoteNew: struct {
+        renderMode: RenderMode,
+
         aiDifficulty: ?Ai.Difficulty,
         host: []const u8,
         port: u16,
     },
     remoteJoin: struct {
+        renderMode: RenderMode,
+
         code: []const u8,
         host: []const u8,
         port: u16,
     },
-};
 
-const MyIterator = struct {
-    strings: [][]u8,
-    index: usize = 0,
-
-    // fn initMock(allocator: Allocator, values: []const []const u8) !MyIterator {
-    //     const strings = try allocator.alloc([]u8, values.len);
-
-    //     for (values, 0..) |value, i| {
-    //         strings[i] = try allocator.dupe(u8, value);
-    //     }
-
-    //     return .{
-    //         .strings = strings,
-    //         .index = 0,
-    //     };
-    // }
-    // fn deinitMock(self: *MyIterator, allocator: Allocator) void {
-    //     for (self.strings) |string| {
-    //         allocator.free(string);
-    //     }
-
-    //     allocator.free(self.strings);
-    // }
-
-    fn next(self: *MyIterator) ?[]u8 {
-        const index = self.index;
-        for (self.strings[index..]) |string| {
-            self.index += 1;
-            return string;
+    pub fn renderMode(self: AppConfig) RenderMode {
+        switch (self) {
+            inline else => |case| return case.renderMode,
         }
-        return null;
-    }
-    fn skip(self: *MyIterator) bool {
-        if (self.index > self.strings.len - 1) {
-            return false;
-        }
-
-        self.index += 1;
-        return true;
-    }
-    fn reset(self: *MyIterator) void {
-        self.index = 0;
     }
 };
 
-test MyIterator {
-    // ugly codes here!!!
-    var arr = std.ArrayList([]u8).init(testing.allocator);
-    defer arr.deinit();
-    const one = try testing.allocator.dupe(u8, "one");
-    defer testing.allocator.free(one);
-    try arr.append(one);
-    const two = try testing.allocator.dupe(u8, "two");
-    defer testing.allocator.free(two);
-    try arr.append(two);
-
-    var iter = MyIterator{ .strings = arr.items };
-
-    try testing.expectEqualStrings("one", iter.next().?);
-    try testing.expectEqualStrings("two", iter.next().?);
-    try testing.expectEqual(null, iter.next());
-
-    iter.reset();
-
-    try testing.expectEqual(true, iter.skip());
-    try testing.expectEqual(true, iter.skip());
-    try testing.expectEqual(false, iter.skip());
-}
+const helpMessage =
+    \\how to use:
+    \\remote new - create new game on the remote
+    \\remote join <code> - join a remote game with invite code
+    \\local - start a local game. pass --ai <difficulty> to enable AI
+    \\global flags
+    \\    --gui   enables gui rendering
+;
+const defaultRenderMode: RenderMode = .cli;
+const defaultAIDifficulty: Ai.Difficulty = .easy;
 
 pub fn parseConfig(allocator: Allocator, args: [][]u8) !AppConfig {
     _ = allocator;
@@ -102,15 +59,13 @@ pub fn parseConfig(allocator: Allocator, args: [][]u8) !AppConfig {
     var iter = MyIterator{
         .strings = args,
     };
+
     if (iter.next()) |first| {
         if (std.mem.eql(u8, first, "help")) {
-            debug.print(
-                \\ remote new - create new game on the remote
-                \\ remote join <code> - join a remote game with invite code
-                \\ local - start a local game. pass --ai <difficulty> to enable AI
-            , .{});
+            debug.print(helpMessage, .{});
             return std.process.exit(0);
         } else if (std.mem.eql(u8, first, "remote")) {
+            std.debug.panic("temporary removed", .{});
             if (iter.next()) |second| {
                 if (std.mem.eql(u8, second, "new")) {
 
@@ -170,9 +125,10 @@ pub fn parseConfig(allocator: Allocator, args: [][]u8) !AppConfig {
                 }
             }
         } else if (std.mem.eql(u8, first, "local")) {
-            var config = AppConfig{
-                .local = .{ .aiDifficulty = null },
-            };
+            var config = AppConfig{ .local = .{
+                .renderMode = defaultRenderMode,
+                .aiDifficulty = defaultAIDifficulty,
+            } };
 
             while (iter.next()) |next| {
                 if (std.mem.eql(u8, next, "--ai")) {
@@ -180,6 +136,8 @@ pub fn parseConfig(allocator: Allocator, args: [][]u8) !AppConfig {
                     if (iter.next()) |diff| {
                         config.local.aiDifficulty = try Ai.Difficulty.fromString(diff);
                     }
+                } else if (std.mem.eql(u8, next, "--gui")) {
+                    config.local.renderMode = .gui;
                 }
             }
 
@@ -189,7 +147,8 @@ pub fn parseConfig(allocator: Allocator, args: [][]u8) !AppConfig {
             return error.UnknownGameType;
         }
     }
-
+    debug.print("No argument was provided!\n", .{});
+    debug.print(helpMessage, .{});
     return error.InvalidArgs;
 }
 
@@ -269,4 +228,73 @@ test "parseConfig local" {
             .aiDifficulty = null,
         },
     }, config);
+}
+
+const MyIterator = struct {
+    strings: [][]u8,
+    index: usize = 0,
+
+    // fn initMock(allocator: Allocator, values: []const []const u8) !MyIterator {
+    //     const strings = try allocator.alloc([]u8, values.len);
+
+    //     for (values, 0..) |value, i| {
+    //         strings[i] = try allocator.dupe(u8, value);
+    //     }
+
+    //     return .{
+    //         .strings = strings,
+    //         .index = 0,
+    //     };
+    // }
+    // fn deinitMock(self: *MyIterator, allocator: Allocator) void {
+    //     for (self.strings) |string| {
+    //         allocator.free(string);
+    //     }
+
+    //     allocator.free(self.strings);
+    // }
+
+    fn next(self: *MyIterator) ?[]u8 {
+        const index = self.index;
+        for (self.strings[index..]) |string| {
+            self.index += 1;
+            return string;
+        }
+        return null;
+    }
+    fn skip(self: *MyIterator) bool {
+        if (self.index > self.strings.len - 1) {
+            return false;
+        }
+
+        self.index += 1;
+        return true;
+    }
+    fn reset(self: *MyIterator) void {
+        self.index = 0;
+    }
+};
+
+test MyIterator {
+    // ugly codes here!!!
+    var arr = std.ArrayList([]u8).init(testing.allocator);
+    defer arr.deinit();
+    const one = try testing.allocator.dupe(u8, "one");
+    defer testing.allocator.free(one);
+    try arr.append(one);
+    const two = try testing.allocator.dupe(u8, "two");
+    defer testing.allocator.free(two);
+    try arr.append(two);
+
+    var iter = MyIterator{ .strings = arr.items };
+
+    try testing.expectEqualStrings("one", iter.next().?);
+    try testing.expectEqualStrings("two", iter.next().?);
+    try testing.expectEqual(null, iter.next());
+
+    iter.reset();
+
+    try testing.expectEqual(true, iter.skip());
+    try testing.expectEqual(true, iter.skip());
+    try testing.expectEqual(false, iter.skip());
 }

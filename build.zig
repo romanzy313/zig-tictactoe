@@ -1,5 +1,4 @@
 const std = @import("std");
-
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
 // runner.
@@ -15,20 +14,6 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const exe_app = b.addExecutable(.{
-        .name = "zig-tictactoe-app",
-        .root_source_file = b.path("src/main_app.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    const exe_server = b.addExecutable(.{
-        .name = "zig-tictactoe-server",
-        .root_source_file = b.path("src/main_server.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
     const vendor_modules = ModuleGroup{
         .b = b,
         .definitions = &[_]ModuleGroup.Definition{
@@ -37,7 +22,37 @@ pub fn build(b: *std.Build) void {
         },
     };
 
+    // app goes first
+    const exe_app = b.addExecutable(.{
+        .name = "zig-tictactoe-app",
+        .root_source_file = b.path("src/main_app.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     vendor_modules.addModulesToExe(&exe_app.root_module);
+
+    // https://github.com/Not-Nik/raylib-zig
+    const raylib_dep = b.dependency("raylib-zig", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const raylib = raylib_dep.module("raylib"); // main raylib module
+    const raygui = raylib_dep.module("raygui"); // raygui module
+    const raylib_artifact = raylib_dep.artifact("raylib"); // raylib C library
+
+    exe_app.linkLibrary(raylib_artifact);
+    exe_app.root_module.addImport("raylib", raylib);
+    exe_app.root_module.addImport("raygui", raygui);
+
+    const exe_server = b.addExecutable(.{
+        .name = "zig-tictactoe-server",
+        .root_source_file = b.path("src/main_server.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     vendor_modules.addModulesToExe(&exe_server.root_module);
 
     // This declares intent for the executable to be installed into the
