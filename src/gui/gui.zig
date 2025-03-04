@@ -23,7 +23,7 @@ pub fn runGui(state: *GameState) anyerror!void {
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
 
         // update mouse navigation?
-        // renderer.updateMousePosition(rl.getMousePosition());
+        renderer.updateMousePosition(rl.getMousePosition());
 
         // also ticks should be set to the game_handler
         // but actual intersection logic is done in the renderer...

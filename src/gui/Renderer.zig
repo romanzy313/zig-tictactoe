@@ -35,7 +35,7 @@ pub fn init(size: RenderSize, cell_count: usize) Renderer {
         .size = size,
         .cell_size = 0,
         .cell_count = cell_count,
-        .mouse_pos = .{ .x = 0, .y = 0 },
+        .mouse_pos = .{ .x = -20, .y = -20 },
     };
     self.updateRenderSize(size, cell_count);
 
@@ -73,15 +73,8 @@ pub fn renderFn(self: *Renderer, state: *GameState, cursor_pos: Board.CellPositi
 
     for (state.board.grid, 0..) |row, i| {
         for (row, 0..) |cell, j| {
-            const text: *const [1]u8 = switch (cell) {
-                .empty => "",
-                .x => "x",
-                .o => "o",
-            };
+            self.drawCell(i, j, cell);
 
-            self.drawCell(i, j);
-
-            _ = text;
             _ = cursor_pos;
             _ = maybe_err;
         }
@@ -94,7 +87,7 @@ pub fn renderFn(self: *Renderer, state: *GameState, cursor_pos: Board.CellPositi
     // }
 }
 
-fn drawCell(self: *Renderer, x_idx: usize, y_idx: usize) void {
+fn drawCell(self: *Renderer, x_idx: usize, y_idx: usize, value: Board.CellValue) void {
     // calculate all margins
     //
     // const cell
@@ -107,8 +100,18 @@ fn drawCell(self: *Renderer, x_idx: usize, y_idx: usize) void {
         self.cell_size,
     );
 
-    rl.drawRectangleRec(cell_rec, rl.Color.yellow);
-    // Rectangle
+    // check if we hover
 
-    // rl.checkCollisionPointRec(self.mouse_pos, rec: Rectangle)
+    const is_hover = rl.checkCollisionPointRec(self.mouse_pos, cell_rec);
+
+    const cell_color = if (is_hover) rl.Color.red else rl.Color.light_gray;
+
+    rl.drawRectangleRec(cell_rec, cell_color);
+
+    const text: *const [1]u8 = switch (value) {
+        .empty => "",
+        .x => "x",
+        .o => "o",
+    };
+    _ = text;
 }
