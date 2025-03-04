@@ -16,21 +16,35 @@ pub fn runGui(state: *GameState) anyerror!void {
     defer renderer.deinit();
     var game_handler = LocalGameHandler(Renderer, Renderer.renderFn).init(&renderer, state);
 
+    renderer.updateMousePosition(rl.getMousePosition());
     // Main game loop
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
 
-        // update mouse navigation?
-        renderer.updateMousePosition(rl.getMousePosition());
+        const gui_evt = renderer.getGuiEvent();
+
+        switch (gui_evt) {
+            .click => |ev| try game_handler.tick(.{ .select = .{ .x = ev.x, .y = ev.y } }),
+            .hover => {
+                // this still need to keep the rendering though
+                try game_handler.tick(.{ .rerender = {} });
+            },
+            .none => {
+                // nothing really.
+                try game_handler.tick(.{ .rerender = {} });
+            },
+        }
+        // update mouse state here
+        // renderer.updateMousePosition(rl.getMousePosition());
+
+        // i need to get the actions from the game to here
+        // and apply them on game_handler
+        // try game_handler.tick(.{ .select = .{ .x = 1, .y = 1 } });
 
         // also ticks should be set to the game_handler
         // but actual intersection logic is done in the renderer...
 
-        // this MUST be present here,
-        // or else the render just gets stuck infinitely looping and closing the window becomes impossible
-        // try game_handler.tick(.{ .hover = .{ .x = 1, .y = 1 } });
-
-        // i must do something or else this just gets stuck
-        try game_handler.tick(.{ .rerender = {} });
+        // force rerender every frame, not needed?
+        // try game_handler.tick(.{ .rerender = {} });
         //----------------------------------------------------------------------------------
     }
 

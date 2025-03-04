@@ -216,5 +216,8 @@ pub const Event = union(enum) {
                 else => .BROKEN_IMPL,
             };
         }
+        pub fn toStringz(self: RuntimeError) [*:0]const u8 {
+            return @tagName(self);
+        }
     };
 };

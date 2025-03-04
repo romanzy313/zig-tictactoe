@@ -24,18 +24,20 @@ pub const HandlerEvent = union(enum) {
 pub fn LocalGameHandler(
     comptime IRenderer: type,
     comptime renderFn: *const fn (T: *IRenderer, state: *GameState, maybe_err: ?Event.RuntimeError) anyerror!void,
+    // TODO: also add the publisher? because the game publisher needs to either be local or remote.
 ) type {
     return struct {
         const Self = @This();
 
         ptr: *IRenderer,
         state: *GameState,
+        maybe_error: ?Event.RuntimeError = null,
 
         is_playing: bool = true,
 
-        // implement the IRenderer
-        fn render(self: *Self, maybe_err: ?Event.RuntimeError) anyerror!void {
-            try renderFn(self.ptr, self.state, maybe_err);
+        // wrap the IRenderer
+        fn render(self: *Self) anyerror!void {
+            try renderFn(self.ptr, self.state, self.maybe_error);
         }
 
         pub fn init(ptr: *IRenderer, state: *GameState) Self {
@@ -47,6 +49,14 @@ pub fn LocalGameHandler(
 
         // this should never throw?
         pub fn tick(self: *Self, value: HandlerEvent) !void {
+            switch (value) {
+                .rerender => {},
+                else => {
+                    // reset error only when action was taken
+                    self.maybe_error = null;
+                },
+            }
+
             switch (value) {
                 .select => |position| {
                     const ev = events.Event{ .moveMade = .{
@@ -62,38 +72,42 @@ pub fn LocalGameHandler(
                         });
                         return;
                     };
-                    try self.render(null);
+                    try self.render();
                 },
                 .rerender => {
-                    try self.render(null);
+                    try self.render();
                 },
             }
         }
 
         pub fn onEvent(self: *Self, event: Event) void {
             switch (event) {
-                .__runtimeError => |runtime_error| self.render(runtime_error) catch |err| {
-                    // I must capture this
-                    std.debug.print("FAILED TO RENDER with error {any}\n", .{err});
+                .__runtimeError => |runtime_error| {
+                    self.maybe_error = runtime_error;
+                    self.render() catch |err| {
+                        // I must capture this
+                        std.debug.print("FAILED TO RENDER with error {any}\n", .{err});
+                    };
+                },
+                .gameFinished => {
+                    self.maybe_error = null;
                     self.is_playing = false;
                 },
-                // .gameFinished => {
-                //     std.debug.print("GAME WAS FINISHED\n", .{});
-                // },
-                else => self.render(null) catch |err| {
-                    // I must capture this
-                    std.debug.print("FAILED TO RENDER {any}\n", .{err});
-                    self.is_playing = false;
+                else => {
+                    // reset error on any other event
+                    // but these are currently self-emitted events for ai and stuff. in the future server will emit them instead
+                    self.maybe_error = null;
+                    self.render() catch |err| {
+                        std.debug.print("FAILED TO RENDER {any}\n", .{err});
+                    };
                 },
             }
 
-            const game_over = self.state.status.isGameOver();
+            // const game_over = self.state.status.isGameOver();
 
-            if (game_over) {
-                // this also needs to be passed to the renderer, or renderer needs to be aware if game is over or not!
-                // self.writer.print("Game over. Status: {any}\n", .{self.state.status}) catch unreachable;
-                self.is_playing = false;
-            }
+            // if (game_over) {
+            //     self.is_playing = false;
+            // }
         }
     };
 }

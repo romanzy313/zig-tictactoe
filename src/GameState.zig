@@ -68,6 +68,34 @@ pub fn writeStatus(self: *GameState, writer: anytype) !void {
         .stalemate => try writer.print("Stalemate", .{}),
     }
 }
+pub fn getStatus(self: *GameState) []const u8 {
+    switch (self.status) {
+        .starting => return "Waiting for game to start",
+        .playing => switch (self.current_player) {
+            .x => return "Player X turn",
+            .o => return "Player O turn",
+        },
+        .hasWinner => switch (self.current_player) {
+            .x => return "Player X won",
+            .o => return "Player O won",
+        },
+        .stalemate => return "Stalemate",
+    }
+}
+pub fn getStatusz(self: *GameState) [*:0]const u8 {
+    switch (self.status) {
+        .starting => return "Waiting for game to start",
+        .playing => switch (self.current_player) {
+            .x => return "Player X turn",
+            .o => return "Player O turn",
+        },
+        .hasWinner => switch (self.current_player) {
+            .x => return "Player X won",
+            .o => return "Player O won",
+        },
+        .stalemate => return "Stalemate",
+    }
+}
 // there are sideeffects provided on this.
 // anytype is given to publish events and is_server is passed to
 
