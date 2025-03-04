@@ -17,7 +17,7 @@ pub fn runCli(state: *GameState) !void {
 
     var game_handler = LocalGameHandler(Renderer, Renderer.renderFn).init(&renderer, state);
 
-    try game_handler.render(null);
+    try game_handler.tick(.{ .rerender = {} });
 
     while (game_handler.is_playing) {
         const cmd = try input.readCommand(stdin);
@@ -41,8 +41,7 @@ pub fn runCli(state: *GameState) !void {
                 // this is ugly but it works
                 renderer.cursor_pos = nav.pos;
 
-                try game_handler.render(null);
-                // try game_handler.tick(.{ .hover = nav.pos });
+                try game_handler.tick(.{ .rerender = {} });
             },
         }
     }

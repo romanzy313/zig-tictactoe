@@ -16,9 +16,6 @@ pub fn runGui(state: *GameState) anyerror!void {
     defer renderer.deinit();
     var game_handler = LocalGameHandler(Renderer, Renderer.renderFn).init(&renderer, state);
 
-    // once trigger the rendering
-    //
-    try game_handler.render(null);
     // Main game loop
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
 
@@ -33,7 +30,7 @@ pub fn runGui(state: *GameState) anyerror!void {
         // try game_handler.tick(.{ .hover = .{ .x = 1, .y = 1 } });
 
         // i must do something or else this just gets stuck
-        try renderer.renderFn(state, null);
+        try game_handler.tick(.{ .rerender = {} });
         //----------------------------------------------------------------------------------
     }
 

@@ -10,6 +10,7 @@ const Board = @import("Board.zig");
 
 pub const HandlerEvent = union(enum) {
     select: Board.CellPosition,
+    rerender: void,
 };
 
 // I want this to be interface independent, huh
@@ -32,7 +33,8 @@ pub fn LocalGameHandler(
 
         is_playing: bool = true,
 
-        pub fn render(self: *Self, maybe_err: ?Event.RuntimeError) anyerror!void {
+        // implement the IRenderer
+        fn render(self: *Self, maybe_err: ?Event.RuntimeError) anyerror!void {
             try renderFn(self.ptr, self.state, maybe_err);
         }
 
@@ -60,6 +62,9 @@ pub fn LocalGameHandler(
                         });
                         return;
                     };
+                    try self.render(null);
+                },
+                .rerender => {
                     try self.render(null);
                 },
             }
