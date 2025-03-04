@@ -28,7 +28,7 @@ pub fn runGui(state: *GameState) anyerror!void {
                 try game_handler.tick(.{ .rerender = {} });
             },
             .none => {
-                // nothing really.
+                // i cant not render for some reason
                 try game_handler.tick(.{ .rerender = {} });
             },
         }
