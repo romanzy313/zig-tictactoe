@@ -61,7 +61,7 @@ pub const GameServer = struct {
 
     running: bool = true,
 
-    pub fn init(allocator: Allocator, addr: net.Address) !GameServer {
+    pub fn init(allocator: Allocator,   addr: net.Address) !GameServer {
         const server = try addr.listen(.{
             .reuse_address = true,
             .reuse_port = false, // sanity check
@@ -77,10 +77,16 @@ pub const GameServer = struct {
         };
     }
 
+    pub fn stop(self: *GameServer) void {
+        self.running = false;
+
+        // also will need to wait until all threads are cleaned up or smth
+        // this will be a challenge once tests are created
+    }
+
     pub fn deinit(self: *GameServer) void {
         // cleanup all clients
         log.info("shutting down", .{});
-        self.running = false;
 
         defer self.server.deinit();
     }

@@ -89,6 +89,7 @@ test EventEnvelope {
     try testing.expectEqual(og, res);
 }
 
+// TODO: do proper styling. enum and union(enum) must be snake_case
 pub const Event = union(enum) {
     gameCreated: GameCreated,
     playerJoined: PlayerJoined,
@@ -102,7 +103,7 @@ pub const Event = union(enum) {
     __runtimeError: RuntimeError, // no error reporting yet
 
     pub const GameCreated = struct {
-        gameId: UUID,
+        gameId: UUID, // TODO: gameId must not be here! its specified in the protocol
         boardSize: u8,
         timeLimit: u64 = 0, // TODO: maybe implement this too?
 
