@@ -6,6 +6,7 @@ const game = @import("game.zig");
 const Ai = @import("Ai.zig");
 const GameState = @import("GameState.zig");
 const Event = @import("events.zig").Event;
+const runCli = @import("cli/cli.zig").runCli;
 
 const handler = @import("cli/handler.zig");
 const parseConfig = @import("config.zig").parseConfig;
@@ -37,40 +38,7 @@ pub fn main() !void {
 
     switch (renderMode) {
         .cli => {
-            const raw = try input.RawMode.init(false);
-            defer raw.deinit();
-
-            const stdin = std.io.getStdIn().reader().any();
-            const stdout = std.io.getStdOut().writer().any();
-
-            var nav = input.Navigation.init(board_size);
-
-            var game_handler = handler.GameHandler.init(stdout, &state);
-            game_handler.cursor_pos = nav.pos;
-            try game_handler.render(null); // render first frame
-
-            while (game_handler.is_playing) {
-                const cmd = try input.readCommand(stdin);
-                switch (cmd) {
-                    .Quit => {
-                        try stdout.print("Quitting...\n", .{});
-                        return;
-                    },
-                    .Select => {
-                        try game_handler.tick(.{ .select = nav.pos });
-                    },
-                    else => |nav_cmd| {
-                        switch (nav_cmd) {
-                            .Left => nav.onDir(.Left),
-                            .Right => nav.onDir(.Right),
-                            .Up => nav.onDir(.Up),
-                            .Down => nav.onDir(.Down),
-                            else => unreachable,
-                        }
-                        try game_handler.tick(.{ .hover = nav.pos });
-                    },
-                }
-            }
+            try runCli(&state);
         },
         .gui => {
             try runGui();
