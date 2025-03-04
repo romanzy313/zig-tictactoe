@@ -11,6 +11,9 @@ const Event = @import("events.zig").Event;
 // a discriminated union of event types, attached with the data.
 
 pub const Proto = struct {
+    // TODO: this also need serialise/deserisize functionality
+    // zig is really bad at this...
+
     pub const GameId = [16]u8;
 
     pub const Client2Server = union(enum(u8)) {
@@ -20,6 +23,7 @@ pub const Proto = struct {
         gameJoin: GameId = 1,
         gameLeave: GameId = 2,
         gameCreate: GameCreate = 3,
+        // trying to pinpint leak location
         gameSubmitEvent: Event = 4,
 
         // unfortunately the serialization cannot be simplied by declaring this as a
@@ -52,20 +56,32 @@ pub const Proto = struct {
             }
         };
         pub const GameCreate = struct {
-            // there is an internal event for creating a game
-            boardSize: u8,
-            timeLimit: u64 = 0, // TODO: maybe implement this too?
+            board_size: u8,
+            time_limit: u64 = 0, // TODO: maybe implement this too?
+
+            pub fn serialize(self: GameCreate, writer: AnyWriter) !void {
+                try writer.writeByte(self.board_size);
+            }
+            pub fn deserialize(reader: AnyReader) !GameCreate {
+                var game_create = GameCreate{ .board_size = undefined };
+                game_create.board_size = try reader.readByte(&game_create);
+                return game_create;
+            }
         };
 
         pub fn serialize(self: Client2Server, writer: AnyWriter) !void {
-            json.stringify(self, .{}, writer);
+            try json.stringify(self, .{}, writer);
         }
 
-        // pub fn deserialize(allocator: Allocator, reader: AnyReader) Client2Server {
+        pub fn deserialize(allocator: Allocator, reader: AnyReader) !Client2Server {
+            var json_reader = json.reader(allocator, reader);
+            defer json_reader.deinit();
 
-        //     json.parseFromSlice(Client2Server, allocator, s: []const u8, options: ParseOptions)
+            const res = try json.parseFromTokenSource(Client2Server, allocator, &json_reader, .{ .allocate = .alloc_always });
+            defer res.deinit(); // this is safe as all values comes from orignal buffer?
 
-        // }
+            return res.value;
+        }
     };
 
     pub const Server2Client = union(enum(u8)) {
@@ -112,11 +128,10 @@ pub const Proto = struct {
     };
 };
 
-test "serialization" {
+test "serialization manual" {
     var buf: [100]u8 = undefined;
     var rw = std.io.fixedBufferStream(&buf);
 
-    std.debug.print("why arent you testing", .{});
     const og = Proto.Client2Server.Login{
         .id = UUID.initFromNumber(10).bytes,
         .name = [_]u8{'a'} ** 32,
@@ -127,6 +142,26 @@ test "serialization" {
 
     try rw.seekTo(0);
     const new = try Proto.Client2Server.Login.deserialize(rw.reader().any());
+    try testing.expectEqualDeep(og, new);
+}
+
+test "serialization as json" {
+    var buf: [95]u8 = undefined;
+    var rw = std.io.fixedBufferStream(&buf);
+
+    const og = Proto.Client2Server{ .auth = .{
+        .id = UUID.initFromNumber(10).bytes,
+        .name = [_]u8{'a'} ** 32,
+    } };
+
+    try og.serialize(rw.writer().any());
+    std.debug.print("serialized value is {s}\n", .{rw.getWritten()});
+
+    try rw.seekTo(0);
+    // this wont fail if exactly the full buffer contains the value
+    // this will be the case when values are separated by newlines
+    const new = try Proto.Client2Server.deserialize(testing.allocator, rw.reader().any());
+
     try testing.expectEqualDeep(og, new);
 }
 
