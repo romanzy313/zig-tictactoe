@@ -13,7 +13,7 @@ pub fn runCli(state: *GameState) !void {
 
     var nav = input.Navigation.init(state.board.size);
 
-    var renderer = Renderer.init(stdout);
+    var renderer = Renderer.init(stdout, nav.pos);
 
     var game_handler = LocalGameHandler(Renderer, Renderer.renderFn).init(&renderer, state);
 
@@ -37,7 +37,12 @@ pub fn runCli(state: *GameState) !void {
                     .Down => nav.onDir(.Down),
                     else => unreachable,
                 }
-                try game_handler.tick(.{ .hover = nav.pos });
+                // force update the local renderer
+                // this is ugly but it works
+                renderer.cursor_pos = nav.pos;
+
+                try game_handler.render(null);
+                // try game_handler.tick(.{ .hover = nav.pos });
             },
         }
     }

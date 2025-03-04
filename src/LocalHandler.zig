@@ -10,7 +10,6 @@ const Board = @import("Board.zig");
 
 pub const HandlerEvent = union(enum) {
     select: Board.CellPosition,
-    hover: Board.CellPosition,
 };
 
 // I want this to be interface independent, huh
@@ -23,26 +22,24 @@ pub const HandlerEvent = union(enum) {
 
 pub fn LocalGameHandler(
     comptime IRenderer: type,
-    comptime renderFn: *const fn (T: *IRenderer, state: *GameState, cursor_pos: Board.CellPosition, maybe_err: ?Event.RuntimeError) anyerror!void,
+    comptime renderFn: *const fn (T: *IRenderer, state: *GameState, maybe_err: ?Event.RuntimeError) anyerror!void,
 ) type {
     return struct {
         const Self = @This();
 
         ptr: *IRenderer,
         state: *GameState,
-        cursor_pos: Board.CellPosition,
 
         is_playing: bool = true,
 
         pub fn render(self: *Self, maybe_err: ?Event.RuntimeError) anyerror!void {
-            try renderFn(self.ptr, self.state, self.cursor_pos, maybe_err);
+            try renderFn(self.ptr, self.state, maybe_err);
         }
 
         pub fn init(ptr: *IRenderer, state: *GameState) Self {
             return .{
                 .ptr = ptr,
                 .state = state,
-                .cursor_pos = Board.CellPosition{ .x = 0, .y = 0 },
             };
         }
 
@@ -50,10 +47,8 @@ pub fn LocalGameHandler(
         pub fn tick(self: *Self, value: HandlerEvent) !void {
             switch (value) {
                 .select => |position| {
-                    self.cursor_pos = position;
-
                     const ev = events.Event{ .moveMade = .{
-                        .position = self.cursor_pos,
+                        .position = position,
                         .side = self.state.current_player,
                     } };
 
@@ -65,11 +60,6 @@ pub fn LocalGameHandler(
                         });
                         return;
                     };
-                    try self.render(null);
-                },
-                .hover => |position| {
-                    // purely local state
-                    self.cursor_pos = position;
                     try self.render(null);
                 },
             }

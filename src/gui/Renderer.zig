@@ -59,7 +59,7 @@ pub fn updateMousePosition(self: *Renderer, pos: rl.Vector2) void {
     self.mouse_pos = pos;
 }
 
-pub fn renderFn(self: *Renderer, state: *GameState, cursor_pos: Board.CellPosition, maybe_err: ?Event.RuntimeError) !void {
+pub fn renderFn(self: *Renderer, state: *GameState, maybe_err: ?Event.RuntimeError) !void {
     rl.beginDrawing();
     defer rl.endDrawing();
     rl.clearBackground(rl.Color.white);
@@ -75,7 +75,6 @@ pub fn renderFn(self: *Renderer, state: *GameState, cursor_pos: Board.CellPositi
         for (row, 0..) |cell, j| {
             self.drawCell(i, j, cell);
 
-            _ = cursor_pos;
             _ = maybe_err;
         }
     }

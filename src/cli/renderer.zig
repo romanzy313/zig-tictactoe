@@ -16,14 +16,15 @@ const do_clear_term = true;
 // confronts to comptime renderFn: *const fn (T: *Iface, state: GameState, cursor_pos: Board.CellPosition, maybe_err: ?Event.RuntimeError) void,
 pub const Renderer = struct {
     writer: AnyWriter,
-
-    pub fn init(writer: AnyWriter) Renderer {
+    cursor_pos: Board.CellPosition,
+    pub fn init(writer: AnyWriter, cursor_pos: Board.CellPosition) Renderer {
         return .{
             .writer = writer,
+            .cursor_pos = cursor_pos,
         };
     }
 
-    pub fn renderFn(self: *Renderer, state: *GameState, cursor_pos: Board.CellPosition, maybe_err: ?Event.RuntimeError) !void {
+    pub fn renderFn(self: *Renderer, state: *GameState, maybe_err: ?Event.RuntimeError) !void {
         if (do_clear_term) {
             try self.writer.writeAll(clear_term);
         }
@@ -35,7 +36,7 @@ pub const Renderer = struct {
                     .o => "o",
                 };
 
-                const is_selected = cursor_pos.y == i and cursor_pos.x == j;
+                const is_selected = self.cursor_pos.y == i and self.cursor_pos.x == j;
 
                 if (is_selected) {
                     try self.writer.print("{s}{s}{s}", .{ ansi_selected, value, ansi_normal });

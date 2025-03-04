@@ -30,8 +30,10 @@ pub fn runGui(state: *GameState) anyerror!void {
 
         // this MUST be present here,
         // or else the render just gets stuck infinitely looping and closing the window becomes impossible
-        try game_handler.tick(.{ .hover = .{ .x = 1, .y = 1 } });
+        // try game_handler.tick(.{ .hover = .{ .x = 1, .y = 1 } });
 
+        // i must do something or else this just gets stuck
+        try renderer.renderFn(state, null);
         //----------------------------------------------------------------------------------
     }
 
