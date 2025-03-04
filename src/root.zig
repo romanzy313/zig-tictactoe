@@ -14,6 +14,8 @@ comptime {
     _ = @import("GameState.zig");
     _ = @import("WinCondition.zig");
 
+    _ = @import("protocol.zig");
+
     // _ = @import("app/config.zig");
     // _ = @import("app/handler.zig");
     // _ = @import("app/input.zig");

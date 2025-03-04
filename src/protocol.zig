@@ -1,4 +1,11 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+const AnyWriter = std.io.AnyWriter;
+const AnyReader = std.io.AnyReader;
+const json = std.json;
+const testing = std.testing;
+
+const UUID = @import("uuid").UUID;
 const Event = @import("events.zig").Event;
 
 // a discriminated union of event types, attached with the data.
@@ -15,15 +22,50 @@ pub const Proto = struct {
         gameCreate: GameCreate = 3,
         gameSubmitEvent: Event = 4,
 
+        // unfortunately the serialization cannot be simplied by declaring this as a
+        // "packed struct"
+        // error: packed structs cannot contain fields of type '[16]u8'
+        // this is because of array endianess...
+        // see https://github.com/ziglang/zig/issues/10113#issuecomment-1036713233
         pub const Login = struct {
             id: [16]u8,
             name: [32]u8,
+
+            // this works without needed an allocator, like in the case of json
+            // but what if the original memory is cleaned up?
+            // what if the original written is no longer in scope?
+            // do i need to dupe everything in this case?
+            // this is where zigs memory management gets iffy...
+            // need to know who OWNS memory for cleanup and also for long-living references
+            // if these values are passed along to some long running zig storage (like a HashMap)
+            // then after the incoming message goes out of scope, these values will become trash
+            // and then its confusing where the bad memory came from
+            pub fn serialize(self: Login, writer: AnyWriter) !void {
+                _ = try writer.write(&self.id);
+                _ = try writer.write(&self.name);
+            }
+            pub fn deserialize(reader: AnyReader) !Login {
+                var login = Login{ .id = undefined, .name = undefined };
+                _ = try reader.read(&login.id);
+                _ = try reader.read(&login.name);
+                return login;
+            }
         };
         pub const GameCreate = struct {
             // there is an internal event for creating a game
             boardSize: u8,
             timeLimit: u64 = 0, // TODO: maybe implement this too?
         };
+
+        pub fn serialize(self: Client2Server, writer: AnyWriter) !void {
+            json.stringify(self, .{}, writer);
+        }
+
+        // pub fn deserialize(allocator: Allocator, reader: AnyReader) Client2Server {
+
+        //     json.parseFromSlice(Client2Server, allocator, s: []const u8, options: ParseOptions)
+
+        // }
     };
 
     pub const Server2Client = union(enum(u8)) {
@@ -69,6 +111,24 @@ pub const Proto = struct {
         };
     };
 };
+
+test "serialization" {
+    var buf: [100]u8 = undefined;
+    var rw = std.io.fixedBufferStream(&buf);
+
+    std.debug.print("why arent you testing", .{});
+    const og = Proto.Client2Server.Login{
+        .id = UUID.initFromNumber(10).bytes,
+        .name = [_]u8{'a'} ** 32,
+    };
+
+    try og.serialize(rw.writer().any());
+    // std.debug.print("serialized value is {s}\n", .{rw.getWritten()});
+
+    try rw.seekTo(0);
+    const new = try Proto.Client2Server.Login.deserialize(rw.reader().any());
+    try testing.expectEqualDeep(og, new);
+}
 
 // another idea is to define an RPC
 // but this must be tightly integrated into a global table for all events
