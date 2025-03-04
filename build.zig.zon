@@ -24,7 +24,7 @@
     // internet connectivity.
     .dependencies = .{
         // official repo, but im not using it
-        .raylib = .{
+        .@"raylib-official-dont-use" = .{
             .url = "https://github.com/raysan5/raylib/archive/refs/tags/5.5.tar.gz",
             .hash = "1220d93782859726c2c46a05450615b7edfc82b7319daac50cbc7c3345d660b022d7",
         },

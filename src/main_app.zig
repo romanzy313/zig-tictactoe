@@ -8,7 +8,6 @@ const GameState = @import("GameState.zig");
 const Event = @import("events.zig").Event;
 const runCli = @import("cli/cli.zig").runCli;
 
-const handler = @import("cli/handler.zig");
 const parseConfig = @import("config.zig").parseConfig;
 const input = @import("cli/input.zig");
 const runGui = @import("gui/gui.zig").runGui;
@@ -41,7 +40,7 @@ pub fn main() !void {
             try runCli(&state);
         },
         .gui => {
-            try runGui();
+            try runGui(&state);
         },
     }
 }
