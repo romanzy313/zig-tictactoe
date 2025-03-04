@@ -11,17 +11,16 @@ const LocalGameHandler = @import("../LocalHandler.zig").LocalGameHandler;
 const cell_margin: f32 = 10;
 const font_size: f32 = 160;
 
-// confronts to comptime renderFn: *const fn (T: *Iface, state: GameState, cursor_pos: Board.CellPosition, maybe_err: ?Event.RuntimeError) void,
+// confronts to comptime renderFn: *const fn (T: *Iface, state: GameState, maybe_err: ?Event.RuntimeError) void,
 
 const Renderer = @This();
 
 size: RenderSize,
 cell_size: f32,
 cell_count: usize,
-mouse_pos: rl.Vector2,
-gui_event: GuiEvent,
+cell_hovered: ?Board.CellPosition,
+
 font: rl.Font,
-// status_writer: AnyWriter,
 
 pub const RenderSize = struct {
     board_size: f32,
@@ -41,8 +40,7 @@ pub fn init(size: RenderSize, cell_count: usize) Renderer {
         .size = size,
         .cell_size = 0,
         .cell_count = cell_count,
-        .mouse_pos = .{ .x = -20, .y = -20 },
-        .gui_event = .{ .none = {} },
+        .cell_hovered = null,
         .font = rl.getFontDefault(),
     };
     self.updateRenderSize(size, cell_count);
@@ -63,15 +61,10 @@ pub fn updateRenderSize(self: *Renderer, size: RenderSize, cell_count: usize) vo
     self.cell_size = (size.board_size - (cell_margin * (cell_count_f + 1))) / cell_count_f;
 }
 
-pub fn updateMousePosition(self: *Renderer, pos: rl.Vector2) void {
-    self.mouse_pos = pos;
-}
-
 pub fn renderFn(self: *Renderer, state: *GameState, maybe_err: ?Event.RuntimeError) !void {
     rl.beginDrawing();
     defer rl.endDrawing();
 
-    std.debug.print("clearing a screen and rendering\n", .{});
     rl.clearBackground(rl.Color.white);
 
     // draw the status bar
@@ -84,7 +77,14 @@ pub fn renderFn(self: *Renderer, state: *GameState, maybe_err: ?Event.RuntimeErr
 
     for (state.board.grid, 0..) |row, i| {
         for (row, 0..) |cell, j| {
-            const hover = false;
+            // zig is an expressive langauge
+            const hover = if (self.cell_hovered) |pos| if (pos.x == j and pos.y == i) true else false else false;
+            // equivelent to:
+            // const hover = if (self.cell_hovered) |pos|
+            //     if (pos.x == j and pos.y == i) true else false
+            // else
+            //     false;
+
             self.drawCell(i, j, hover, cell);
         }
     }
@@ -101,14 +101,10 @@ pub fn renderFn(self: *Renderer, state: *GameState, maybe_err: ?Event.RuntimeErr
     }, status_font_size, 1, rl.Color.black);
 
     if (maybe_err) |err| {
-        // try writer.print("\nerror: {any}", .{err});
-        std.debug.print("error: {any}\n", .{err});
         rl.drawTextEx(self.font, err.toStringz(), .{
             .x = 10,
             .y = self.size.board_size + 50,
         }, status_font_size, 1, rl.Color.red);
-    } else {
-        // std.debug.print("\n", .{});
     }
 }
 
@@ -121,6 +117,8 @@ const GuiEvent = union(enum) {
 // this need to be ran once per frame
 // and it needs to update the dir in here too..
 pub fn getGuiEvent(self: *Renderer) GuiEvent {
+    self.cell_hovered = null; // this is some nice spagetti, oh well
+
     const mouse_position = rl.getMousePosition();
 
     const board_size = self.size.board_size;
@@ -137,6 +135,8 @@ pub fn getGuiEvent(self: *Renderer) GuiEvent {
     const x_idx: usize = @intFromFloat(@floor((mouse_position.y / board_size) * cell_count_f));
     const y_idx: usize = @intFromFloat(@floor((mouse_position.x / board_size) * cell_count_f));
 
+    self.cell_hovered = .{ .x = x_idx, .y = y_idx };
+
     // check for mouse input
     const is_click = rl.isMouseButtonPressed(.mouse_button_left);
 
@@ -144,7 +144,7 @@ pub fn getGuiEvent(self: *Renderer) GuiEvent {
         return GuiEvent{ .click = .{ .x = x_idx, .y = y_idx } };
     }
 
-    return GuiEvent{ .hover = .{ .x = x_idx, .y = y_idx } };
+    return GuiEvent{ .hover = self.cell_hovered.? };
 }
 
 // i need to get mouse position
