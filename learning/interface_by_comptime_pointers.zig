@@ -5,7 +5,7 @@ const std = @import("std");
 
 fn System(
     comptime Iface: type,
-    comptime pushSmth: *const fn (T: *Iface, data: u8) void,
+    comptime pushFn: *const fn (T: *Iface, data: u8) void,
 ) type {
     return struct {
         ptr: *Iface,
@@ -18,26 +18,16 @@ fn System(
             };
         }
 
+        // wrap the original function
+        fn push(self: *Self, value: u8) void {
+            pushFn(self.ptr, value);
+        }
+
+        // use the wrapped function
         pub fn double(self: *Self, value: u7) void {
             const result: u8 = @as(u8, value) * 2;
 
-            pushSmth(self.ptr, result);
-        }
-    };
-}
-
-fn TestInter(comptime T: type, comptime buffer_capacity: usize) type {
-    return struct {
-        values: std.BoundedArray(T, buffer_capacity),
-
-        pub fn init() @This() {
-            return .{
-                .values = std.BoundedArray(T, buffer_capacity){},
-            };
-        }
-
-        pub fn pushSmth(self: *@This(), ev: u8) void {
-            self.values.append(ev) catch @panic("TestIntegration event overflow");
+            self.push(result);
         }
     };
 }
@@ -51,14 +41,14 @@ const TestIntegration = struct {
         };
     }
 
-    pub fn pushSmth(self: *@This(), ev: u8) void {
+    pub fn push(self: *@This(), ev: u8) void {
         self.values.append(ev) catch @panic("TestIntegration event overflow");
     }
 };
 
 test {
     var pusher = TestIntegration.init();
-    var system = System(TestIntegration, TestIntegration.pushSmth).init(&pusher);
+    var system = System(TestIntegration, TestIntegration.push).init(&pusher);
 
     system.double(127);
     try std.testing.expectEqual(pusher.values.buffer[0], 254);
